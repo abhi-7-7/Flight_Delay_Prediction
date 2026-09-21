@@ -11,7 +11,7 @@ notebooks/01_eda.ipynb      <- Phase 1: exploratory data analysis (this file)
 figures/                    <- charts saved by the notebook, used in the report
 ```
 
-## How to run
+## How to Run
 
 1. Download `flights.csv` from https://www.kaggle.com/datasets/matinsajadi/flights
 2. Put it in `raw_data/`
