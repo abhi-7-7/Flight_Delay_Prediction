@@ -35,5 +35,5 @@ Requires: `pandas numpy matplotlib seaborn scikit-learn`
 
 - 1 flight in 4 is delayed (24.5%), so accuracy is not used. We report PR AUC, lift, ROC AUC and recall at fixed precision.
 - Delay rises through the day, and Saturday is calmest.
-- The validation months are much calmer (16% delayed) than train and test (26%), so PR AUC is not comparable across splits. We report **lift** (PR AUC divided by base rate).
+- The validation months are much calmer (16% delayed) than train and test (26%) so PR AUC is not comparable across splits. We report **lift** (PR AUC divided by base rate).
 - No weather data, so storm days cannot be predicted. This caps model performance.
