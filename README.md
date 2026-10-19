@@ -177,12 +177,11 @@ The project compares a simple baseline with a more complex candidate model, incl
 
 The lift calculation is:
 
-\[
-\text{PR-AUC Lift}
-=
+$$
+\text{PR-AUC Lift} =
 \frac{\text{Average Precision}}
 {\text{Positive-Class Prevalence}}
-\]
+$$
 
 Average precision and prevalence must be calculated on the **same evaluation split**.
 
