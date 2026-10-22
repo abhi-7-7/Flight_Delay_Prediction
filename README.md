@@ -45,8 +45,6 @@ Flight_Delay_Prediction/
 ```
 
 
-```
-
 | File or directory | Description |
 |---|---|
 | `notebooks/01_eda.ipynb` | Exploratory data analysis and visualizations |
