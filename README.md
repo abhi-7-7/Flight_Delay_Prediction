@@ -1,12 +1,63 @@
 # Flight Delay Prediction — NYC Flights (2013)
 
-**Team T029 | Section E | Machine Learning Project**
+**Team T029 · Section E · Machine Learning Project**
 
-This project predicts whether a flight will arrive at least 15 minutes late using the NYC flights dataset from 2013. It covers exploratory data analysis, feature engineering, data preprocessing, machine learning model comparison, evaluation, and an offline rescheduling experiment.
+A machine-learning project that predicts whether a flight departing from New York City's JFK, LaGuardia (LGA), or Newark Liberty (EWR) airports will arrive at least **15 minutes late**. The project covers exploratory data analysis (EDA), feature engineering, preprocessing, chronological model evaluation, and an offline rescheduling experiment.
 
-**GitHub Repository:** [Flight_Delay_Prediction](https://github.com/abhi-7-7/Flight_Delay_Prediction)
+**Repository:** [Flight Delay Prediction](https://github.com/abhi-7-7/Flight_Delay_Prediction)
 
-**Prediction cutoff:** 6:00 PM on the day before departure. Feature availability at this cutoff must be verified before operational use.
+> **Prediction cutoff:** 6:00 PM on the day before scheduled departure. Every predictor must be available by this cutoff for the model to be suitable for the intended prediction task.
+
+## Table of Contents
+
+- [Project Overview](#project-overview)
+- [Key Results](#key-results)
+- [Team Members](#team-members)
+- [Dataset](#dataset)
+- [Methodology](#methodology)
+- [Features and Preprocessing](#features-and-preprocessing)
+- [Evaluation Metrics](#evaluation-metrics)
+- [Key Findings and Limitations](#key-findings-and-limitations)
+- [Project Structure](#project-structure)
+- [Installation and Usage](#installation-and-usage)
+- [References](#references)
+
+## Project Overview
+
+Flight delays affect passengers, airline schedules, airport operations, and connecting journeys. This project investigates whether scheduled-flight and calendar information can help identify flights likely to arrive at least 15 minutes late.
+
+The workflow includes:
+
+1. Exploratory data analysis and visualization.
+2. Target-label cleaning and feature engineering.
+3. Leakage-aware preprocessing.
+4. Chronological training, validation, and test splits.
+5. Comparison of a baseline classifier, Logistic Regression, and XGBoost.
+6. Model selection using validation Average Precision.
+7. Decision-threshold selection using validation F1-score.
+8. Evaluation on a held-out November–December test period.
+
+The project is an experimental machine-learning study, not a validated operational flight-dispatch or rescheduling system.
+
+## Key Results
+
+The following results come from the project's recorded model-application run. Re-run the final notebook before submission to confirm that the values remain unchanged.
+
+| Item | Result |
+|---|---:|
+| Original dataset records | 336,776 |
+| Labelled flights retained | 327,346 |
+| Overall delayed-flight prevalence | 24.47% |
+| Selected model | Logistic Regression |
+| Validation Average Precision | 0.2348 |
+| Test Average Precision | 0.3359 |
+| Test ROC-AUC | 0.6070 |
+| Test precision | 0.3415 |
+| Test recall | 0.4456 |
+| Test F1-score | 0.3867 |
+| Selected classification threshold | 0.2611 |
+
+Logistic Regression was selected because its validation Average Precision was slightly higher than XGBoost's. The test results indicate **limited but measurable ranking ability**; they do not demonstrate high-reliability prediction.
 
 ## Team Members
 
@@ -18,52 +69,15 @@ This project predicts whether a flight will arrive at least 15 minutes late usin
 | 4 | Ashish Kumar Yadav | 2401020015 |
 | 5 | Shivansh Tiwari | 2401020108 |
 
-## Project Structure
+## Dataset
 
-The project is organized around exploratory analysis, preprocessing, model application, and generated artifacts. Verify the filenames against the current repository.
-
-```text
-Flight_Delay_Prediction/
-├── Datasets/
-│   ├── flight_delay_project_outputs.zip
-│   └── flights.zip
-├── Notebooks/
-│   ├── 01_eda.ipynb
-│   ├── 02_Model_Application.ipynb
-│   └── Preprocessing.ipynb
-├── Reports/
-│   ├── Flight_Delay_Prediction_Report.pdf
-│   └── Literature_Review_Flight_Delay.pdf
-├── figures/
-│   ├── 01_cancellations.png
-│   ├── 02_time_patterns.png
-│   ├── 03_daily_timeline.png
-│   ├── 04_carrier_origin.png
-│   └── 05_feature_signal.png
-├── .gitignore
-└── README.md
-```
-
-
-| File or directory | Description |
-|---|---|
-| `notebooks/01_eda.ipynb` | Exploratory data analysis and visualizations |
-| `notebooks/Preprocessing.ipynb` | Data cleaning, feature engineering, and chronological splitting |
-| `notebooks/02_Model_Application.ipynb` | Model training, validation, threshold selection, and evaluation |
-| `figures/` | Exported charts, if included in the repository |
-| `processed_flights/` | Processed datasets, if generated |
-| `outputs/` | Model files, predictions, metrics, and other generated artifacts, if saved |
-| `README.md` | Project documentation |
-
-## Dataset Overview
-
-The project uses the 2013 NYC flights dataset, covering flights associated with three airports:
+The project uses the NYC flights dataset for 2013, covering departures from three airports:
 
 - **JFK:** John F. Kennedy International Airport
 - **LGA:** LaGuardia Airport
 - **EWR:** Newark Liberty International Airport
 
-### Dataset Statistics
+### Dataset statistics
 
 | Dataset detail | Reported value |
 |---|---:|
@@ -73,11 +87,11 @@ The project uses the 2013 NYC flights dataset, covering flights associated with 
 | Labelled rows retained | 327,346 |
 | Delayed-flight prevalence | 24.47% |
 
-These values are based on the project's reported exploratory analysis and should be recalculated if the dataset or preprocessing changes.
+Flights without an observed `arr_delay` value are excluded because their target label cannot be determined. Cancellations and diversions are not modelled as separate outcomes.
 
-### Target Definition
+### Target definition
 
-A flight is classified as delayed if its arrival delay is at least 15 minutes.
+A flight is labelled delayed if its arrival delay is at least 15 minutes:
 
 ```python
 y = (arr_delay >= 15).astype(int)
@@ -86,37 +100,33 @@ y = (arr_delay >= 15).astype(int)
 - `1`: Arrival delay of 15 minutes or more.
 - `0`: Arrival delay of less than 15 minutes.
 
-Rows with missing arrival-delay labels are excluded because their target cannot be determined. Cancellations and diversions are not modelled as separate outcomes.
+## Methodology
 
-## Prediction Cutoff and Data Leakage Prevention
+### 1. Prediction-time constraints and leakage prevention
 
-The intended prediction time is 6:00 PM on the day before departure. Model inputs must contain only information available by that cutoff.
+The intended forecast is made at 6:00 PM on the day before scheduled departure. Features must therefore reflect information genuinely available by that time.
 
-The project follows these principles:
+The workflow is designed to:
 
-- Use chronological rather than random data splitting.
-- Exclude actual operational outcomes from predictor features.
+- Use chronological rather than randomly shuffled partitions.
+- Exclude post-departure outcomes from model predictors.
 - Fit preprocessing transformations on training data only.
 - Use validation data for model comparison and threshold selection.
-- Reserve the test period for final evaluation.
-- Verify that schedule-derived features are available at prediction time.
+- Keep the test period separate from model-selection decisions.
+- Verify the availability and construction of schedule-derived features.
 
-The following columns are excluded from predictors:
+The recorded feature-exclusion list includes `dep_time`, `dep_delay`, `arr_time`, `air_time`, `arr_delay`, `id`, `name`, `tailnum`, `y`, `date`, and `split`. The exact feature allow-list should be checked against the final notebook.
 
-`dep_time`, `dep_delay`, `arr_time`, `air_time`, `arr_delay`, `id`, `name`, `tailnum`, `y`, `date`, and `split`.
+### 2. Feature engineering
 
-The `arr_delay` column defines the target and must not be included in the model inputs. The construction and availability of every feature must be checked independently.
-
-## Feature Engineering
-
-### Categorical Features
+**Categorical features**
 
 - `carrier`
 - `origin`
 - `dest_grouped`
 - `flight`
 
-### Numerical and Scheduled-Time Features
+**Numerical and schedule-derived features**
 
 - `distance`
 - `sched_minute`
@@ -127,174 +137,189 @@ The `arr_delay` column defines the target and must not be included in the model 
 - `weekday_sin`, `weekday_cos`
 - `year_day_sin`, `year_day_cos`
 
-Cyclical encodings represent recurring time patterns. The `scheduled_origin_hour_count` feature represents flights scheduled from the same origin during the same scheduled hour. It is a schedule-based count, not a direct measurement of actual congestion.
+Cyclical encodings represent repeating patterns in hours, weekdays, and days of the year. The `scheduled_origin_hour_count` feature represents a schedule-based count, not a direct measurement of real-time airport congestion.
 
-The categorical `flight` feature should be evaluated carefully because sparse or unseen identifiers may limit generalization.
+The `flight` feature may capture recurring service patterns, but its contribution to generalization should be assessed through additional testing.
 
-## Chronological Data Split
+### 3. Chronological data split
 
-The labelled dataset is divided chronologically to simulate prediction on later observations.
+| Split | Period | Rows | Delayed flights | Delay rate |
+|---|---|---:|---:|---:|
+| Training | January–August 2013 | 217,727 | 57,423 | 26.37% |
+| Validation | September–October 2013 | 55,628 | 8,731 | 15.70% |
+| Testing | November–December 2013 | 53,991 | 13,946 | 25.83% |
 
-| Split | Period | Rows | Purpose |
-|---|---|---:|---|
-| Training | January–August 2013 | 217,727 | Fit preprocessing and model parameters |
-| Validation | September–October 2013 | 55,628 | Compare models and select the threshold |
-| Testing | November–December 2013 | 53,991 | Final evaluation |
+The validation period has a substantially lower delay prevalence than the training and test periods. This temporal variation can affect model selection, threshold selection, and comparisons of Average Precision.
 
-### Delay Prevalence by Split
-
-| Split | Delayed-flight prevalence |
-|---|---:|
-| Training | 26.37% |
-| Validation | 15.70% |
-| Testing | 25.83% |
-
-The validation period has a substantially lower delay prevalence than the training and test periods. This temporal variation is important when interpreting model performance.
-
-## Models and Preprocessing
-
-### Preprocessing
+### 4. Preprocessing
 
 The documented preprocessing pipeline uses:
 
-- **Numerical features:** Median imputation followed by standardization.
-- **Categorical features:** Most-frequent imputation followed by one-hot encoding.
-- **Unknown categories:** Configured to be ignored by the encoder.
-- **Infrequent categories:** Handled according to the encoder's configured minimum-frequency setting.
+- **Numerical features:** Median imputation and standardization.
+- **Categorical features:** Most-frequent imputation and one-hot encoding.
+- **Unknown categories:** Ignored by the encoder.
+- **Infrequent categories:** Grouped according to the encoder configuration.
 
-Preprocessing should be fitted on the training partition and applied consistently to validation and test data.
+Preprocessing is fitted on training data and then applied consistently to validation and test data.
 
-### Models Compared
+### 5. Models compared
 
 | Model | Purpose |
 |---|---|
-| Dummy Classifier (`prior`) | Establishes a baseline using the training class distribution |
-| Logistic Regression | Provides a linear classification model |
-| XGBoost Classifier | Models nonlinear relationships and feature interactions using boosted decision trees |
+| Dummy Classifier (`prior`) | Establishes a class-prior baseline |
+| Logistic Regression | Provides a regularized linear classification benchmark |
+| XGBoost Classifier | Models nonlinear relationships and feature interactions using boosted trees |
 
-The documented XGBoost configuration uses 400 estimators, maximum depth 5, learning rate 0.05, row subsampling 0.8, and column subsampling 0.8. These settings should be verified against the final notebook.
+The recorded XGBoost configuration uses 400 estimators, maximum depth 5, learning rate 0.05, row subsampling 0.8, and column subsampling 0.8. Confirm these settings against the final notebook.
 
-### Model Selection and Threshold
+### 6. Model selection and threshold
 
-Average Precision (AP) on the validation dataset is the primary model-selection metric. The classification threshold is selected using validation predictions by maximizing the F1-score.
-
-The selected threshold is applied unchanged to the test predictions. The test set must not be used for model selection or threshold optimization.
-
-## Evaluation Metrics
-
-The project uses the following metrics:
-
-- **Average Precision (AP):** Summarizes precision across recall levels.
-- **ROC-AUC:** Measures ranking discrimination between delayed and non-delayed flights.
-- **Precision:** Proportion of flights flagged as delayed that are actually delayed.
-- **Recall:** Proportion of actual delayed flights correctly identified.
-- **F1-score:** Harmonic mean of precision and recall.
-- **Accuracy:** Proportion of correct predictions.
-- **Classification report:** Provides class-wise precision, recall, F1-score, and support.
-- **Permutation feature importance:** Estimates how shuffling a feature affects validation Average Precision.
-
-### Validation Model Comparison
+Average Precision (AP) on the validation set is the primary model-selection metric. The decision threshold is chosen by maximizing validation F1-score, then applied unchanged to the test predictions.
 
 | Model | Validation AP | Validation ROC-AUC |
 |---|---:|---:|
 | Logistic Regression | 0.2348 | 0.6446 |
 | XGBoost | 0.2301 | 0.6368 |
-| Dummy Classifier (`prior`) | Verify from notebook | Verify from notebook |
+| Dummy Classifier (`prior`) | 0.1570 | 0.5000 |
 
-Logistic Regression performed slightly better than XGBoost on the recorded validation metrics. This small difference does not establish statistical superiority.
+Logistic Regression leads XGBoost by a small margin. This does not establish that it is universally superior or that the difference is statistically significant.
 
-### Recorded Test Results
+## Evaluation Metrics
 
-The following results are from a previously recorded model run. Verify them against the final notebook before submission.
+The project reports:
+
+- **Average Precision (AP):** Summarizes precision across recall increments.
+- **ROC-AUC:** Measures ranking discrimination across classification thresholds.
+- **Precision:** Fraction of flights flagged as delayed that are actually delayed.
+- **Recall:** Fraction of actual delayed flights identified.
+- **F1-score:** Harmonic mean of precision and recall.
+- **Accuracy:** Fraction of correctly classified observations.
+- **Permutation importance:** Measures how shuffling a feature affects a validation metric.
+
+### Held-out test performance
+
+The selected Logistic Regression model was evaluated on the November–December test set at the validation-selected threshold of `0.2611`.
 
 | Metric | Test result |
 |---|---:|
 | Average Precision | 0.3359 |
+| AP lift over test prevalence | 1.30× |
 | ROC-AUC | 0.6070 |
 | Precision | 0.3415 |
 | Recall | 0.4456 |
 | F1-score | 0.3867 |
 | Accuracy | 0.6349 |
-| Selected threshold | 0.2611 |
+| Test prevalence | 0.2583 |
 
-These values are specific to the recorded execution. The final report and README should use the same selected model, threshold, and evaluation results as the final notebook.
-
-### Average Precision Lift
-
-Average Precision lift compares the model's AP with the positive-class prevalence on the same evaluation split.
+AP lift is calculated as:
 
 ```text
-AP lift = Average Precision / Positive-class prevalence
+AP lift = Test Average Precision / Test positive-class prevalence
 ```
 
-Both quantities must be calculated on the same split for a meaningful comparison.
+For this run, the model's AP is approximately 1.30 times the test prevalence.
 
-## Main Findings and Limitations
+**Important interpretation:** Test accuracy is 0.6349, below the 0.7417 accuracy of an always-negative classifier. The selected threshold prioritizes a precision–recall trade-off through F1-score rather than maximizing accuracy. The appropriate threshold for real operations would depend on the relative costs of missed delays and false alerts.
+
+## Key Findings and Limitations
+
+### Findings
 
 - Approximately 24.47% of labelled flights in the reported analysis are delayed by at least 15 minutes.
-- Delay rates vary by scheduled hour, weekday, and calendar period.
-- Validation delay prevalence differs substantially from training and test prevalence.
-- Weather observations are not included.
-- Cancellations and diversions are not separately modelled.
-- Feature availability at the intended prediction cutoff requires verification.
-- Results from one year and three airports should not automatically be generalized to other years or airports.
-- The offline rescheduling experiment is an analytical exercise, not a validated operational recommendation.
+- Observed delay rates vary by scheduled departure hour, weekday, and carrier.
+- Validation delay prevalence is substantially lower than training and test prevalence.
+- Logistic Regression slightly outperforms XGBoost on the recorded validation Average Precision.
 
-These findings describe observed associations and limitations; they do not establish causation.
+### Limitations
 
-## Generated Outputs
+- **No weather observations:** The model cannot use measured weather conditions.
+- **Missing target labels:** Cancellations and diversions are not separately predicted.
+- **Temporal drift:** The evaluation covers one year and one chronological split.
+- **Feature availability:** Schedule-derived inputs must be verified against the 6:00 PM cutoff.
+- **Potential feature memorization:** The `flight` feature requires further generalization testing.
+- **Threshold choice:** F1-score is an experimental selection rule, not a proven operational cost optimum.
+- **Limited scope:** Results from three New York airports in 2013 should not automatically be generalized to other locations or years.
 
-Depending on the notebook configuration, the model application stage may generate:
+The offline rescheduling experiment is an analytical exercise. It should not be interpreted as a validated operational recommendation.
 
-- `flight_delay_model.joblib` — Serialized selected model pipeline.
-- `flight_delay_test_predictions.csv` — Test predictions and associated evaluation fields.
-- `flight_delay_test_metrics.json` — Final test metrics.
-- `validation_model_comparison.csv` — Validation comparison.
-- Permutation feature-importance results.
-- Precision–Recall curves and other evaluation plots.
+## Project Structure
 
-Check the actual output directory and filenames before relying on these artifacts.
+The following is the intended logical structure. Confirm directory names and filenames against the current repository before relying on these paths.
 
-## How to Run the Project
+```text
+Flight_Delay_Prediction/
+├── Datasets/
+│   ├── flight_delay_project_outputs.zip
+│   └── flights.zip
+├── Notebooks/
+│   ├── 01_eda.ipynb
+│   ├── Preprocessing.ipynb
+│   └── 02_Model_Application.ipynb
+├── Reports/
+│   ├── Flight_Delay_Prediction_Report.pdf
+│   └── Literature_Review_Flight_Delay.pdf
+├── figures/
+├── .gitignore
+└── README.md
+```
 
-### 1. Obtain the Dataset
+| Component | Description |
+|---|---|
+| EDA notebook | Dataset inspection, target distribution, and exploratory visualizations |
+| Preprocessing notebook | Data cleaning, feature engineering, and chronological splitting |
+| Model-application notebook | Model comparison, threshold selection, and test evaluation |
+| `figures/` | Charts exported by the analysis, if committed |
+| `Reports/` | Project report and literature review, if committed |
 
-Download the NYC 2013 flights dataset from the source used by the project. Place the CSV at the location expected by the preprocessing notebook.
+## Installation and Usage
 
-If using Google Colab, upload the CSV or mount the storage location expected by the notebook.
+### 1. Obtain the dataset
 
-Do not commit raw data unless permitted by its licence and your course requirements.
+Obtain the same version of the NYC 2013 flights dataset used by the project. Place the source file at the path expected by the notebooks.
 
-### 2. Install Dependencies
+In Google Colab, upload the dataset or mount the storage location expected by the notebook.
 
-The project uses the following Python libraries:
+Do not commit raw data unless its licence and your course requirements permit it.
+
+### 2. Install dependencies
 
 ```bash
 pip install pandas numpy matplotlib seaborn scikit-learn xgboost joblib
 ```
 
-The exact dependencies may vary with notebook changes. Record the Python and library versions used for the final run to improve reproducibility.
+The exact package versions should be recorded for a reproducible final run.
 
-### 3. Run the Notebooks
+### 3. Run the notebooks
 
-1. Open `notebooks/01_eda.ipynb` and run the exploratory analysis.
-2. Open `notebooks/Preprocessing.ipynb` and execute the cleaning, feature-engineering, and chronological-split cells.
-3. Confirm that the processed datasets are saved at the locations expected by the model application notebook.
-4. Open `notebooks/02_Model_Application.ipynb` and run the cells from top to bottom.
-5. Review the validation comparison, selected threshold, test metrics, plots, and generated artifacts.
-6. Ensure the final README and project report match the results of the final notebook run.
+Run the notebooks in this order:
 
-Update the notebook names and paths above if the repository uses different ones.
+1. `01_eda.ipynb` — inspect the dataset and generate exploratory analysis.
+2. `Preprocessing.ipynb` — clean the data, engineer features, and create chronological partitions.
+3. `02_Model_Application.ipynb` — compare models, select the threshold, evaluate the test set, and generate outputs.
 
-## References and Resources
+Restart the runtime when appropriate and execute the notebooks from top to bottom. Verify that data paths, output paths, split sizes, feature exclusions, model selection, threshold, and metrics match this README and the final report.
 
-- **Dataset:** Add the exact NYC flights dataset source URL and version used by the project.
-- **Official delay reporting:** [U.S. Bureau of Transportation Statistics — Airline On-Time Statistics](https://www.bts.gov/topics/airlines-and-airports/number-14-time-reporting).
-- **XGBoost paper:** Chen, T. and Guestrin, C. (2016). *XGBoost: A Scalable Tree Boosting System.* [DOI: 10.1145/2939672.2939785](https://doi.org/10.1145/2939672.2939785).
-- **Additional systematic review:** Gharibzadeh et al., *Trends and gaps in machine learning based flight delay prediction in spatiotemporal and data-driven approaches: A systematic review.* [DOI: 10.1016/j.asoc.2026.115761](https://doi.org/10.1016/j.asoc.2026.115761). Verify publication metadata before academic submission.
-- **Additional benchmarking study:** [Sustainability, 2025, article 9887](https://www.mdpi.com/2071-1050/17/21/9887). Verify the title, authors, and relevance before citing it academically.
+**Notebook links:** Add the two verified Google Colab URLs here, and make sure the sharing permissions allow your evaluator to open them.
+
+- EDA / preprocessing notebook: `ADD_VERIFIED_COLAB_LINK`
+- Model-application notebook: `ADD_VERIFIED_COLAB_LINK`
+
+### Generated outputs
+
+Depending on notebook configuration, the model-application stage may generate a serialized model, test predictions, metric summaries, model-comparison results, permutation-importance results, and evaluation plots.
+
+Check the actual output directory and filenames before documenting or using these artifacts.
+
+## References
+
+- **Dataset:** [NYC flights dataset on Kaggle](https://www.kaggle.com/datasets/matinsajadi/flights) — confirm that this is the exact source and version used in the project.
+- **NYC flights reference package:** [tidyverse/nycflights13](https://github.com/tidyverse/nycflights13).
+- **Airline on-time statistics:** [U.S. Bureau of Transportation Statistics](https://www.bts.gov/topics/airlines-and-airports/number-14-time-reporting).
+- **XGBoost:** Chen, T. and Guestrin, C. (2016). *XGBoost: A Scalable Tree Boosting System.* [https://doi.org/10.1145/2939672.2939785](https://doi.org/10.1145/2939672.2939785).
+- **Flight-delay prediction review:** Gharibzadeh et al., *Trends and gaps in machine learning based flight delay prediction in spatiotemporal and data-driven approaches: A systematic review.* [https://doi.org/10.1016/j.asoc.2026.115761](https://doi.org/10.1016/j.asoc.2026.115761). Verify the final publication metadata before academic submission.
+- **Benchmarking study:** [Sustainability, 2025, article 9887](https://www.mdpi.com/2071-1050/17/21/9887). Verify the full title, authors, and relevance before citing it academically.
 
 ---
 
 **Project:** Flight Delay Prediction — NYC Flights (2013)  
-**Team:** T029 | **Section:** E
+**Team:** T029 · **Section:** E
