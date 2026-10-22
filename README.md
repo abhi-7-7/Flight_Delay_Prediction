@@ -23,9 +23,6 @@ This project predicts whether a flight will arrive at least 15 minutes late usin
 The project is organized around exploratory analysis, preprocessing, model application, and generated artifacts. Verify the filenames against the current repository.
 
 ```text
-## Project Structure
-
-```text
 Flight_Delay_Prediction/
 ├── Datasets/
 │   ├── flight_delay_project_outputs.zip
