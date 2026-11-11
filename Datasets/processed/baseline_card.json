@@ -1,0 +1,93 @@
+{
+  "yardstick": "xgboost (tuned)",
+  "tuned_settings": {
+    "n_estimators": 300,
+    "max_depth": 5,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 1,
+    "reg_lambda": 1.0
+  },
+  "tune_fraction": 0.5,
+  "tuning_budget": {
+    "candidates": 8,
+    "folds": 3
+  },
+  "rolling_origin_validation_months": [
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "precision_target_assumption": 0.35,
+  "scores": {
+    "prior": {
+      "AP": 0.232166,
+      "ROC_AUC": 0.463573,
+      "recall@precision>=35%": 0.0,
+      "mean_predicted": 0.256326,
+      "observed_rate": 0.23936,
+      "ECE": 0.016966,
+      "Brier": 0.182844
+    },
+    "logistic regression": {
+      "AP": 0.348471,
+      "ROC_AUC": 0.655527,
+      "recall@precision>=35%": 0.470748,
+      "mean_predicted": 0.254546,
+      "observed_rate": 0.23936,
+      "ECE": 0.017401,
+      "Brier": 0.173105
+    },
+    "xgboost (starting settings)": {
+      "AP": 0.379145,
+      "ROC_AUC": 0.676188,
+      "recall@precision>=35%": 0.611701,
+      "mean_predicted": 0.255153,
+      "observed_rate": 0.23936,
+      "ECE": 0.015793,
+      "Brier": 0.169939
+    },
+    "xgboost (tuned)": {
+      "AP": 0.379145,
+      "ROC_AUC": 0.676188,
+      "recall@precision>=35%": 0.611701,
+      "mean_predicted": 0.255153,
+      "observed_rate": 0.23936,
+      "ECE": 0.015793,
+      "Brier": 0.169939
+    }
+  },
+  "cost": {
+    "prior": {
+      "train_seconds": 0.0075,
+      "predict_ms_per_1000_rows": 0.0201,
+      "model_kb": 0.469
+    },
+    "logistic regression": {
+      "train_seconds": 1.4713,
+      "predict_ms_per_1000_rows": 0.4023,
+      "model_kb": 1.644
+    },
+    "xgboost (starting settings)": {
+      "train_seconds": 1.9721,
+      "predict_ms_per_1000_rows": 0.4157,
+      "model_kb": 794.187
+    },
+    "xgboost (tuned)": {
+      "train_seconds": 1.8398,
+      "predict_ms_per_1000_rows": 0.3615,
+      "model_kb": 794.187
+    }
+  },
+  "cheapest_sufficient_fraction": 0.5,
+  "cheapest_sufficient_groups": [
+    "fine_time",
+    "carrier",
+    "congestion",
+    "weekday"
+  ],
+  "illustrative_network_parameters": 4577
+}
