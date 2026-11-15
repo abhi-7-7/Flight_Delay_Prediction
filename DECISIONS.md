@@ -44,7 +44,7 @@ Status key: ⏳ pending · ✅ decided
 |---|---|---|---|
 | 0 | What must the deep model beat? | Phase 1 LR / XGBoost; + hand-made lag features | ✅ |
 | 1 | Which history branches help? | none / origin / route / origin + route | ✅ |
-| 2 | How far back? | 7 vs 14 days | ⏳ |
+| 2 | How far back? | 7 vs 14 days (+ 1, 3, 5 added to bracket the best) | ✅ |
 | 3 | How much is weather worth? | none / daily (≤ cutoff) / + perfect forecast (upper bound) | ⏳ |
 | 4 | Which sequence encoder? | GRU vs 1D CNN | ⏳ |
 | 5 | How to encode categories? | one-hot vs embeddings; ± flight-number embedding | ⏳ |
@@ -113,3 +113,48 @@ Each stage below is filled in from `experiments/results.csv` once its runs are c
 5. **The networks overfit quickly.** Validation AP peaks at epoch 2–3 and falls by epoch 5, even though training loss keeps improving. The likely cause is the shift between training months (26% delayed) and validation months (16% delayed). This feeds directly into Stage 6 (regularisation).
 
 **Decision:** Keep **both history branches (origin + route)** in the model. New best: **val AP 0.2645 ± 0.0066**.
+
+### Stage 2: How far back?
+
+**Question:** How many observation days of history should each branch read? The plan was 7 vs 14 days. After the first results showed shorter was better, 1, 3 and 5 days were added to find where the gain stops.
+
+**Setup:** `configs/stage2/*.yaml`. Same network as the Stage 1 winner (origin + route GRU branches, no weather). Only the window length changes. 3 seeds each. The 14-day run repeats Stage 1's `origin_route` and gives exactly the same numbers (0.2645 ± 0.0066), which confirms that runs are reproducible.
+
+**Validation results (Sep–Oct 2013):**
+
+| Window | Model | Runs | Val AP (mean ± std) | AP lift | Val ROC-AUC | Val F1 |
+|---|---|---:|---:|---:|---:|---:|
+| 1 day | nn_gru | 3 | 0.2533 ± 0.0016 | 1.61× | 0.6614 | 0.3369 |
+| 3 days | nn_gru | 3 | **0.2728 ± 0.0092** | 1.74× | 0.6786 | 0.3528 |
+| 5 days | nn_gru | 3 | 0.2677 ± 0.0022 | 1.71× | 0.6760 | 0.3514 |
+| 7 days | nn_gru | 3 | 0.2655 ± 0.0048 | 1.69× | 0.6731 | 0.3492 |
+| 14 days | nn_gru | 3 | 0.2645 ± 0.0066 | 1.69× | 0.6745 | 0.3507 |
+
+**Same-seed comparison against 7 days** (val AP difference for seeds 42 / 43 / 44):
+
+| Window | Seed 42 | Seed 43 | Seed 44 |
+|---|---:|---:|---:|
+| 1 day | −0.0103 | −0.0159 | −0.0105 |
+| 3 days | +0.0033 | +0.0123 | +0.0062 |
+| 5 days | +0.0023 | −0.0016 | +0.0057 |
+| 14 days | +0.0004 | +0.0005 | −0.0041 |
+
+**Fixed-epoch check** (mean val AP of 3 seeds, from `artifacts/curves/`):
+
+| Window | Epoch 1 | Epoch 2 | Epoch 3 | Epoch 5 |
+|---|---:|---:|---:|---:|
+| 1 day | 0.2441 | 0.2433 | 0.2433 | 0.2445 |
+| 3 days | 0.2584 | 0.2645 | 0.2701 | 0.2635 |
+| 5 days | 0.2539 | 0.2651 | 0.2677 | 0.2457 |
+| 7 days | 0.2547 | 0.2641 | 0.2635 | 0.2514 |
+| 14 days | 0.2542 | 0.2623 | 0.2610 | 0.2429 |
+
+**Findings:**
+
+1. **Some sequence is needed.** Using only yesterday (1 day) is clearly worse than 3 days (−0.020 AP, worse in every seed). So the model gains from seeing how the last few days developed, not just from the latest day.
+2. **Beyond about 3 days, older history does not help.** 7 and 14 days are indistinguishable (paired differences of ±0.004). 3 days beats 7 days in all three seeds (+0.003 to +0.012). Disruption at NYC airports is short-lived, so the most recent few days carry the signal.
+3. **Longer windows overfit faster.** At epoch 5, the 14-day model has fallen to 0.2429, while the 3-day model is still at 0.2635. More inputs per flight give the network more ways to fit patterns specific to the training months (see Stage 1 finding 5).
+4. **The ranking holds without early stopping.** At a fixed epoch 3, 3 days (0.2701) is still the best window.
+5. **Caveat:** the 3-day window has the largest seed spread (± 0.0092; seed 43 reaches 0.2833). Its lead over 5 days is small and partly within noise. Stage 6 (regularisation) should re-check 3 vs 5 days if it changes how fast the model overfits.
+
+**Decision:** Use a **3-day window** for both branches from Stage 3 on. New best: **val AP 0.2728 ± 0.0092**.
