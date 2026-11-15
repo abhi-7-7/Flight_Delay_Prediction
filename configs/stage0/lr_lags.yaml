@@ -1,0 +1,6 @@
+stage: 0
+experiment: phase1_plus_lags
+model: logreg
+features: phase1_lags
+seeds: [42]
+notes: Phase 1 features + hand-made origin/route lag features (cutoff-safe)

@@ -1,0 +1,160 @@
+# Phase 2 Decision Log
+
+This file records how the Phase 2 (deep learning) design was reached.
+There are two kinds of decision:
+
+- **Design rules:** constraints fixed by reasoning before any experiment. They define the problem and are never tuned.
+- **Experimental choices:** settled by comparing candidates on the **validation split (Sep–Oct 2013)**. The test split (Nov–Dec 2013) is used **once**, in Stage 8, on the final model only.
+
+Every run is appended to [`experiments/results.csv`](experiments/results.csv), including runs that lost. Each run's exact settings are in `configs/`.
+
+---
+
+## Part A: Design rules (fixed)
+
+| # | Rule | Reason |
+|---|---|---|
+| R1 | **Prediction cutoff: 6:00 PM local time on the day before departure (D−1).** | Same as Phase 1, so Phase 2 results are directly comparable. Gives a usable advance warning. |
+| R2 | **Target: arrival delay ≥ 15 minutes.** | US DOT on-time definition, used in Phase 1 and the literature. |
+| R3 | **Chronological splits:** train Jan–Aug, validation Sep–Oct, test Nov–Dec. | Mimics predicting future flights. Same as Phase 1. |
+| R4 | **No post-departure inputs** (`dep_time`, `dep_delay`, `arr_time`, `air_time`, `arr_delay`, `tailnum`, …). | They are unknown at the cutoff (leakage). |
+| R5 | **A past flight's outcome counts as known only once it has actually landed**, using its actual arrival converted to New York time. For flights on day D, history may only use outcomes known before 6 PM on D−1. | Strict version of R1 for history features. |
+| R6 | **"Observation days" run 6 PM → 6 PM.** Observation day *k* covers 18:00 on *k−1* to 17:59 on *k*. A flight on D uses observation days D−14 … D−1, all fully known at the cutoff. | Every history step has the same length and is complete; no partial days. |
+| R7 | **Weather for main models: only hourly observations up to 17:xx on D−1**, summarised per observation day and origin. | Departure-time weather is not known at the cutoff. |
+| R8 | **One "perfect forecast" experiment** may use actual weather in a ±2 h window around scheduled departure. It is always labelled as an **upper bound**, never as the headline result. | Measures how much a good weather forecast would be worth, without breaking R1. |
+| R9 | **Join weather on `origin, year, month, day, hour`**, never on `time_hour` (UTC in `weather.csv`, local time in `flights.csv`). | Avoids a silent 4–5 hour shift. |
+| R10 | **Model selection on validation AP; threshold by maximum validation F1.** | Same protocol as Phase 1. |
+| R11 | **Deep learning configurations are run with 3 seeds**; mean ± std is reported. | Neural networks vary from run to run; one run cannot show that one option beats another. |
+
+### Data sources
+
+| File | Source | Use |
+|---|---|---|
+| `Datasets/flights.zip` | NYC 2013 flights (Phase 1) | Flights, labels, schedule |
+| `Datasets/weather.csv` | `tidyverse/nycflights13` `data-raw/weather.csv` (Iowa Environmental Mesonet ASOS) | Hourly origin weather |
+| `Datasets/airports.csv` | `tidyverse/nycflights13` `data-raw/airports.csv` | Destination time zones (needed for R5) |
+
+---
+
+## Part B: Experimental choices
+
+Status key: ⏳ pending · ✅ decided
+
+| Stage | Question | Candidates | Status |
+|---|---|---|---|
+| 0 | What must the deep model beat? | Phase 1 LR / XGBoost; + hand-made lag features | ✅ |
+| 1 | Which history branches help? | none / origin / route / origin + route | ✅ |
+| 2 | How far back? | 7 vs 14 days (+ 1, 3, 5 added to bracket the best) | ✅ |
+| 3 | How much is weather worth? | none / daily (≤ cutoff) / + perfect forecast (upper bound) | ⏳ |
+| 4 | Which sequence encoder? | GRU vs 1D CNN | ⏳ |
+| 5 | How to encode categories? | one-hot vs embeddings; ± flight-number embedding | ⏳ |
+| 6 | How much regularisation? | dropout, weight decay, early stopping | ⏳ |
+| 7 | Which hybrid? | A: NN representation → XGBoost/LR · B: stacking · C: residual; for A: out-of-fold vs split-train vs naive | ⏳ |
+| 8 | Final test (run once) | the selected configuration | ⏳ |
+
+Each stage below is filled in from `experiments/results.csv` once its runs are complete.
+
+### Stage 0: Baselines
+
+**Question:** What does the deep model have to beat? Can simple hand-made history features already capture what a sequence model would learn?
+
+**Runs:** `configs/stage0/*.yaml`. XGBoost uses 3 seeds. Logistic Regression (lbfgs) is deterministic, so it is run once.
+
+**Validation results (Sep–Oct 2013):**
+
+| Experiment | Model | Runs | Val AP (mean ± std) | AP lift | Val ROC-AUC | Val F1 |
+|---|---|---:|---:|---:|---:|---:|
+| dummy_prior | dummy | 1 | 0.1570 ± 0.0000 | 1.00× | 0.5000 | 0.2713 |
+| phase1_features | logreg | 1 | 0.2349 ± 0.0000 | 1.50× | 0.6449 | 0.3267 |
+| phase1_plus_lags | logreg | 1 | 0.2350 ± 0.0000 | 1.50× | 0.6462 | 0.3289 |
+| phase1_features | xgboost | 3 | 0.2336 ± 0.0160 | 1.49× | 0.6339 | 0.3206 |
+| phase1_plus_lags | xgboost | 3 | 0.2413 ± 0.0018 | 1.54× | 0.6494 | 0.3304 |
+
+**Findings:**
+
+1. **Phase 1 is reproduced.** Logistic Regression gives validation AP 0.2349 / ROC-AUC 0.6449, against 0.2348 / 0.6446 reported in Phase 1. The Phase 2 pipeline therefore starts from the same point.
+2. **Phase 1's XGBoost result depends on the seed.** Across 3 seeds, validation AP ranges from 0.2216 to 0.2518 (std 0.016). The single-seed Phase 1 comparison (LR 0.2348 vs XGBoost 0.2301) falls inside that noise, so "LR beat XGBoost" was not a reliable conclusion. This supports rule R11 (multiple seeds).
+3. **Hand-made lag features help XGBoost a little and LR not at all.** XGBoost improves from 0.2336 to 0.2413 mean AP, and its seed spread drops tenfold (0.016 → 0.0018). LR is unchanged, which suggests the history signal is non-linear (e.g. it matters mainly during disruption).
+4. **The gain from history is modest.** Under the 6 PM D−1 cutoff, recent delay history adds about +0.008 AP. Any deep sequence model has to beat this to justify itself.
+
+**Decision:** The target to beat is **XGBoost + hand-made lags (val AP 0.2413 ± 0.0018)**. Every later stage is compared against this row, not against Phase 1.
+
+### Stage 1: Which history branches help?
+
+**Question:** Does the network gain from reading recent history as a sequence, and from which level (origin airport, route, or both)?
+
+**Setup:** `configs/stage1/*.yaml`. Same network for all four runs (static branch with embeddings for carrier / origin / grouped destination + Phase 1 numerics; GRU encoders, hidden size 32; dropout 0.2; AdamW, weight decay 1e-4). 14-day window, no weather, no flight-number embedding. 3 seeds each. Early stopping on validation AP (patience 4).
+
+**Validation results (Sep–Oct 2013):**
+
+| Experiment | Model | Runs | Val AP (mean ± std) | AP lift | Val ROC-AUC | Val F1 |
+|---|---|---:|---:|---:|---:|---:|
+| static_only | nn_gru | 3 | 0.2394 ± 0.0052 | 1.53× | 0.6456 | 0.3272 |
+| origin_only | nn_gru | 3 | 0.2586 ± 0.0015 | 1.65× | 0.6662 | 0.3426 |
+| route_only | nn_gru | 3 | 0.2522 ± 0.0027 | 1.61× | 0.6585 | 0.3356 |
+| origin_route | nn_gru | 3 | **0.2645 ± 0.0066** | 1.69× | 0.6745 | 0.3507 |
+| _Stage 0 target: XGBoost + lags_ | xgboost | 3 | 0.2413 ± 0.0018 | 1.54× | 0.6494 | 0.3304 |
+
+**Check for early-stopping bias.** The networks choose their best epoch on validation, which the tabular baselines do not. Validation AP at a **fixed** epoch (mean of 3 seeds, from `artifacts/curves/`):
+
+| Experiment | Epoch 1 | Epoch 3 | Epoch 5 |
+|---|---:|---:|---:|
+| static_only | 0.2369 | 0.2315 | 0.2318 |
+| origin_only | 0.2476 | 0.2538 | 0.2383 |
+| route_only | 0.2403 | 0.2400 | 0.2452 |
+| origin_route | 0.2542 | 0.2610 | 0.2429 |
+
+**Findings:**
+
+1. **The network on its own adds nothing.** With no history, the network (0.2394) matches XGBoost + lags (0.2413). Embeddings and dense layers on the Phase 1 features are not where the gain comes from.
+2. **Learned history clearly helps.** Origin history adds about +0.019 AP and route history about +0.013. Together they reach **0.2645**, roughly +0.025 over the static network and +0.023 over XGBoost + lags. The same hand-made history summaries gave XGBoost only +0.008 (Stage 0), so the sequence encoders extract more from the same data.
+3. **The two branches complement each other.** Origin history (airport-wide disruption) and route history (route and destination conditions) each help separately, and more together.
+4. **The gain is not an early-stopping artefact.** At a fixed epoch 3, origin + route still beats static only by about 0.03. Early stopping adds a little (0.2610 → 0.2645) but does not change the ranking.
+5. **The networks overfit quickly.** Validation AP peaks at epoch 2–3 and falls by epoch 5, even though training loss keeps improving. The likely cause is the shift between training months (26% delayed) and validation months (16% delayed). This feeds directly into Stage 6 (regularisation).
+
+**Decision:** Keep **both history branches (origin + route)** in the model. New best: **val AP 0.2645 ± 0.0066**.
+
+### Stage 2: How far back?
+
+**Question:** How many observation days of history should each branch read? The plan was 7 vs 14 days. After the first results showed shorter was better, 1, 3 and 5 days were added to find where the gain stops.
+
+**Setup:** `configs/stage2/*.yaml`. Same network as the Stage 1 winner (origin + route GRU branches, no weather). Only the window length changes. 3 seeds each. The 14-day run repeats Stage 1's `origin_route` and gives exactly the same numbers (0.2645 ± 0.0066), which confirms that runs are reproducible.
+
+**Validation results (Sep–Oct 2013):**
+
+| Window | Model | Runs | Val AP (mean ± std) | AP lift | Val ROC-AUC | Val F1 |
+|---|---|---:|---:|---:|---:|---:|
+| 1 day | nn_gru | 3 | 0.2533 ± 0.0016 | 1.61× | 0.6614 | 0.3369 |
+| 3 days | nn_gru | 3 | **0.2728 ± 0.0092** | 1.74× | 0.6786 | 0.3528 |
+| 5 days | nn_gru | 3 | 0.2677 ± 0.0022 | 1.71× | 0.6760 | 0.3514 |
+| 7 days | nn_gru | 3 | 0.2655 ± 0.0048 | 1.69× | 0.6731 | 0.3492 |
+| 14 days | nn_gru | 3 | 0.2645 ± 0.0066 | 1.69× | 0.6745 | 0.3507 |
+
+**Same-seed comparison against 7 days** (val AP difference for seeds 42 / 43 / 44):
+
+| Window | Seed 42 | Seed 43 | Seed 44 |
+|---|---:|---:|---:|
+| 1 day | −0.0103 | −0.0159 | −0.0105 |
+| 3 days | +0.0033 | +0.0123 | +0.0062 |
+| 5 days | +0.0023 | −0.0016 | +0.0057 |
+| 14 days | +0.0004 | +0.0005 | −0.0041 |
+
+**Fixed-epoch check** (mean val AP of 3 seeds, from `artifacts/curves/`):
+
+| Window | Epoch 1 | Epoch 2 | Epoch 3 | Epoch 5 |
+|---|---:|---:|---:|---:|
+| 1 day | 0.2441 | 0.2433 | 0.2433 | 0.2445 |
+| 3 days | 0.2584 | 0.2645 | 0.2701 | 0.2635 |
+| 5 days | 0.2539 | 0.2651 | 0.2677 | 0.2457 |
+| 7 days | 0.2547 | 0.2641 | 0.2635 | 0.2514 |
+| 14 days | 0.2542 | 0.2623 | 0.2610 | 0.2429 |
+
+**Findings:**
+
+1. **Some sequence is needed.** Using only yesterday (1 day) is clearly worse than 3 days (−0.020 AP, worse in every seed). So the model gains from seeing how the last few days developed, not just from the latest day.
+2. **Beyond about 3 days, older history does not help.** 7 and 14 days are indistinguishable (paired differences of ±0.004). 3 days beats 7 days in all three seeds (+0.003 to +0.012). Disruption at NYC airports is short-lived, so the most recent few days carry the signal.
+3. **Longer windows overfit faster.** At epoch 5, the 14-day model has fallen to 0.2429, while the 3-day model is still at 0.2635. More inputs per flight give the network more ways to fit patterns specific to the training months (see Stage 1 finding 5).
+4. **The ranking holds without early stopping.** At a fixed epoch 3, 3 days (0.2701) is still the best window.
+5. **Caveat:** the 3-day window has the largest seed spread (± 0.0092; seed 43 reaches 0.2833). Its lead over 5 days is small and partly within noise. Stage 6 (regularisation) should re-check 3 vs 5 days if it changes how fast the model overfits.
+
+**Decision:** Use a **3-day window** for both branches from Stage 3 on. New best: **val AP 0.2728 ± 0.0092**.

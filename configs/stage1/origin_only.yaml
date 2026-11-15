@@ -1,0 +1,8 @@
+stage: 1
+experiment: origin_only
+branches: [origin]
+window: 14
+weather: false
+encoder: gru
+seeds: [42, 43, 44]
+notes: Origin-airport history branch only

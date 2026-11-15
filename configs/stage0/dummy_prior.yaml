@@ -1,0 +1,6 @@
+stage: 0
+experiment: dummy_prior
+model: dummy
+features: phase1
+seeds: [42]
+notes: Class-prior baseline (no-skill reference)
