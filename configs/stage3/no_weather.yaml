@@ -1,0 +1,9 @@
+stage: 3
+experiment: no_weather
+branches: [origin, route]
+window: 3
+weather: false
+forecast: false
+encoder: gru
+seeds: [42, 43, 44]
+notes: Stage 2 winner, no weather inputs
