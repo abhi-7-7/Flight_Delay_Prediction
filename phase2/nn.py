@@ -186,7 +186,12 @@ def represent(model: FlightNet, data: Batchable, batch_size: int = 8192) -> np.n
 
 def train_model(model: FlightNet, train: Batchable, val: Batchable, *, seed: int,
                 lr: float = 1e-3, weight_decay: float = 1e-4, batch_size: int = 1024,
-                max_epochs: int = 25, patience: int = 4, verbose: bool = True) -> dict:
+                max_epochs: int = 25, patience: int = 4, verbose: bool = True,
+                early_stopping: bool = True) -> dict:
+    """Train with AdamW + BCE. With early_stopping (default) training stops
+    after `patience` epochs without a better validation AP and the best epoch
+    is restored. Without it, all `max_epochs` run and the last epoch is kept
+    (Stage 6 control)."""
     gen = torch.Generator().manual_seed(seed)
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     loss_fn = nn.BCEWithLogitsLoss()
@@ -211,10 +216,11 @@ def train_model(model: FlightNet, train: Batchable, val: Batchable, *, seed: int
             print(f"    epoch {epoch:2d}  loss={total / len(train):.4f}  val_AP={ap:.4f}")
         if ap > best["val_ap"]:
             best = {"val_ap": ap, "epoch": epoch, "state": copy.deepcopy(model.state_dict())}
-        elif epoch - best["epoch"] >= patience:
+        elif early_stopping and epoch - best["epoch"] >= patience:
             break
-    model.load_state_dict(best["state"])
-    return {"best_epoch": best["epoch"], "epochs_run": len(history),
+    if early_stopping:
+        model.load_state_dict(best["state"])
+    return {"best_epoch": best["epoch"] if early_stopping else len(history), "epochs_run": len(history),
             "seconds": time.time() - t0, "history": history}
 
 

@@ -30,7 +30,7 @@ DEFAULTS = {
     "branches": ["origin", "route"], "window": 14, "weather": False, "weather_shift": 0, "forecast": False,
     "flight_embedding": False, "one_hot": False, "encoder": "gru", "hidden": 32, "dropout": 0.2,
     "lr": 1e-3, "weight_decay": 1e-4, "batch_size": 1024, "max_epochs": 25,
-    "patience": 4, "seeds": [42, 43, 44],
+    "patience": 4, "early_stopping": True, "seeds": [42, 43, 44],
 }
 
 
@@ -84,7 +84,8 @@ def main(config_path: str) -> None:
         info = train_model(model, train, val, seed=seed, lr=cfg["lr"],
                            weight_decay=cfg["weight_decay"], batch_size=cfg["batch_size"],
                            max_epochs=cfg["max_epochs"], patience=cfg["patience"],
-                           verbose=cfg.get("verbose", False))
+                           verbose=cfg.get("verbose", False),
+                           early_stopping=cfg["early_stopping"])
         prob = predict(model, val)
         m = validation_metrics(val.y.numpy(), prob)
         append_result({
