@@ -49,7 +49,7 @@ Status key: ⏳ pending · ✅ decided
 | 4 | Which sequence encoder? | GRU vs 1D CNN (pooled / last-day readout) vs flatten control; 3 vs 7 days | ✅ |
 | 5 | How to encode categories? | one-hot vs embeddings; ± flight-number embedding | ✅ |
 | 6 | How much regularisation? | dropout, weight decay, early stopping; + learning rate, GRU size, 3 vs 5 days | ✅ |
-| 7 | Which hybrid? | A: NN representation → XGBoost/LR · B: stacking · C: residual; for A: out-of-fold vs split-train vs naive | ⏳ |
+| 7 | Which hybrid? | A: NN representation → XGBoost · B: stacking · C: residual; for A: out-of-fold vs split-train vs naive | ✅ |
 | 8 | Final test (run once) | the selected configuration | ⏳ |
 
 Each stage below is filled in from `experiments/results.csv` once its runs are complete.
@@ -319,3 +319,45 @@ GRU and pooled CNN were also run with a 7-day window, because Stage 2 chose 3 da
 4. **3 days is confirmed again.** At the new learning rate, 5 days is worse in every seed. This settles the caveat left in Stage 2.
 
 **Decision:** Learning rate **3e-4**, early stopping (patience 4) on validation AP, dropout 0.2, weight decay 1e-4, GRU hidden 32, 3-day window. Best: **val AP 0.3262 ± 0.0058**. This is the final deep-learning model; Stage 7 tests whether hybrids can improve on it.
+
+### Stage 7: Which hybrid?
+
+**Question:** Can combining the Stage 6 network with XGBoost beat the network alone? For hybrid A, how should the second model's training data be produced?
+
+**Setup:** `configs/stage7/hybrids.yaml`, `scripts/run_hybrid.py`. Network = Stage 6 winner. XGBoost = Stage 0 settings on Phase 1 + lag features. 3 seeds; the network and XGBoost are also scored alone with the same seeds.
+
+*Out-of-fold (OOF):* the training split is cut into 4 two-month blocks (Jan–Feb, Mar–Apr, May–Jun, Jul–Aug). Each block gets predictions from a model trained on the other three, so the second-stage model learns from predictions on data the first model never saw.
+
+- **A: representation → XGBoost.** The network's 64-value penultimate layer is added to XGBoost's features.
+  - `A_naive`: training rows get representations from the network trained on those same rows.
+  - `A_split`: network trained on Jan–May; XGBoost trained on Jun–Aug with that network's representations.
+  - `A_oof`: out-of-fold representations.
+- **B: stacking.** Logistic regression on the OOF logits of the network and of XGBoost.
+- **C: residual.** XGBoost starts from the network's OOF logit (`base_margin`) and boosts on the tabular features, so the trees try to model what the network got wrong.
+
+*Engineering note:* the first run crashed (segfault). PyTorch and XGBoost each load their own OpenMP runtime on macOS. It was fixed in its own commit by starting single-threaded and setting thread counts explicitly. The results rows carry the tag `0f26788-dirty` because an unrelated, unused option for Stage 8 (`prepare(..., with_test=True)`) was not yet committed during the run.
+
+**Validation results (Sep–Oct 2013):**
+
+| Experiment | Runs | Val AP (mean ± std) | AP lift | Val ROC-AUC | Val F1 | Same-seed AP vs network (42 / 43 / 44) |
+|---|---:|---:|---:|---:|---:|---|
+| network alone | 3 | **0.3262 ± 0.0058** | 2.08× | 0.6865 | 0.3645 | – |
+| XGBoost + lags alone | 3 | 0.2413 ± 0.0018 | 1.54× | 0.6494 | 0.3304 | −0.091 / −0.082 / −0.083 |
+| A_naive | 3 | 0.3222 ± 0.0043 | 2.05× | 0.6772 | 0.3540 | −0.013 / −0.001 / +0.002 |
+| A_split | 3 | 0.2154 ± 0.0055 | 1.37× | 0.6258 | 0.3174 | −0.122 / −0.099 / −0.111 |
+| A_oof | 3 | 0.2825 ± 0.0051 | 1.80× | 0.6705 | 0.3446 | −0.047 / −0.036 / −0.049 |
+| B_stacking | 3 | 0.3248 ± 0.0017 | 2.07× | **0.6906** | **0.3656** | −0.007 / +0.002 / +0.001 |
+| C_residual | 3 | 0.2763 ± 0.0142 | 1.76× | 0.6463 | 0.3282 | −0.072 / −0.033 / −0.044 |
+
+Stacking weights (logistic regression on logits): network 0.48 / 0.48 / 0.59, XGBoost 0.29 / 0.27 / 0.23.
+
+**Findings:**
+
+1. **No hybrid beats the network on validation AP.** The network already uses everything XGBoost sees, plus weather and history sequences. XGBoost alone is 0.085 AP behind, so it has little to add.
+2. **Stacking (B) is the only hybrid that holds its own.** It ties the network on AP (−0.0014, within noise). It has the highest ROC-AUC and F1, and its seed spread is a third of the network's (± 0.0017). It gives XGBoost a real weight (about 0.27), so XGBoost adds a little ranking information.
+3. **For hybrid A, "out-of-fold" is not automatically the safe choice.** OOF representations come from four *different* networks. Each learns its own internal features, so value 5 from one network does not mean the same thing as value 5 from another. XGBoost learns rules on a mixture of four feature spaces and then sees a fifth at validation time. This is why `A_oof` (0.2825) is worse than `A_naive` (0.3222). Stacking does not have this problem because a predicted probability means the same thing whichever network produced it.
+4. **The naive version barely leaks here.** The usual worry about `A_naive` is that the representations of rows the network was trained on look "too good". But the network is stopped after a few epochs (Stage 6), so it has not memorised the training rows. `A_naive` lands close to the network itself, with no gain.
+5. **The time split (A_split) fails badly.** Its network sees only Jan–May, and XGBoost learns only from Jun–Aug, the peak summer delay season. Both halves see less data, and the second stage learns summer-specific patterns. This is the train/validation shift from Stage 6 at its worst.
+6. **Residual boosting (C) hurts.** 400 trees fitting the network's errors on training months learn corrections that do not carry over to autumn. This is the same shift again.
+
+**Decision:** Selection is on validation AP (rule R10), so the **network alone** is the final model (0.3262 ± 0.0058). **Stacking (B)** is close enough, and more stable, that it is also scored on the test split in Stage 8 as a secondary result. This is declared here, before the test split is used, and it does not change the selected model.
