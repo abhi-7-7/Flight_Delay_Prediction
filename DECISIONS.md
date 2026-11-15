@@ -42,7 +42,7 @@ Status key: ⏳ pending · ✅ decided
 
 | Stage | Question | Candidates | Status |
 |---|---|---|---|
-| 0 | What must the deep model beat? | Phase 1 LR / XGBoost; + hand-made lag features | ⏳ |
+| 0 | What must the deep model beat? | Phase 1 LR / XGBoost; + hand-made lag features | ✅ |
 | 1 | Which history branches help? | none / origin / route / origin + route | ⏳ |
 | 2 | How far back? | 7 vs 14 days | ⏳ |
 | 3 | How much is weather worth? | none / daily (≤ cutoff) / + perfect forecast (upper bound) | ⏳ |
@@ -55,4 +55,26 @@ Status key: ⏳ pending · ✅ decided
 Each stage below is filled in from `experiments/results.csv` once its runs are complete.
 
 ### Stage 0: Baselines
-_Pending._
+
+**Question:** What does the deep model have to beat? Can simple hand-made history features already capture what a sequence model would learn?
+
+**Runs:** `configs/stage0/*.yaml`. XGBoost uses 3 seeds. Logistic Regression (lbfgs) is deterministic, so it is run once.
+
+**Validation results (Sep–Oct 2013):**
+
+| Experiment | Model | Runs | Val AP (mean ± std) | AP lift | Val ROC-AUC | Val F1 |
+|---|---|---:|---:|---:|---:|---:|
+| dummy_prior | dummy | 1 | 0.1570 ± 0.0000 | 1.00× | 0.5000 | 0.2713 |
+| phase1_features | logreg | 1 | 0.2349 ± 0.0000 | 1.50× | 0.6449 | 0.3267 |
+| phase1_plus_lags | logreg | 1 | 0.2350 ± 0.0000 | 1.50× | 0.6462 | 0.3289 |
+| phase1_features | xgboost | 3 | 0.2336 ± 0.0160 | 1.49× | 0.6339 | 0.3206 |
+| phase1_plus_lags | xgboost | 3 | 0.2413 ± 0.0018 | 1.54× | 0.6494 | 0.3304 |
+
+**Findings:**
+
+1. **Phase 1 is reproduced.** Logistic Regression gives validation AP 0.2349 / ROC-AUC 0.6449, against 0.2348 / 0.6446 reported in Phase 1. The Phase 2 pipeline therefore starts from the same point.
+2. **Phase 1's XGBoost result depends on the seed.** Across 3 seeds, validation AP ranges from 0.2216 to 0.2518 (std 0.016). The single-seed Phase 1 comparison (LR 0.2348 vs XGBoost 0.2301) falls inside that noise, so "LR beat XGBoost" was not a reliable conclusion. This supports rule R11 (multiple seeds).
+3. **Hand-made lag features help XGBoost a little and LR not at all.** XGBoost improves from 0.2336 to 0.2413 mean AP, and its seed spread drops tenfold (0.016 → 0.0018). LR is unchanged, which suggests the history signal is non-linear (e.g. it matters mainly during disruption).
+4. **The gain from history is modest.** Under the 6 PM D−1 cutoff, recent delay history adds about +0.008 AP. Any deep sequence model has to beat this to justify itself.
+
+**Decision:** The target to beat is **XGBoost + hand-made lags (val AP 0.2413 ± 0.0018)**. Every later stage is compared against this row, not against Phase 1.
