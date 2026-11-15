@@ -46,7 +46,7 @@ Status key: ⏳ pending · ✅ decided
 | 1 | Which history branches help? | none / origin / route / origin + route | ✅ |
 | 2 | How far back? | 7 vs 14 days (+ 1, 3, 5 added to bracket the best) | ✅ |
 | 3 | How much is weather worth? | none / daily (≤ cutoff) / + perfect forecast (upper bound); + 2 timing controls | ✅ |
-| 4 | Which sequence encoder? | GRU vs 1D CNN | ⏳ |
+| 4 | Which sequence encoder? | GRU vs 1D CNN (pooled / last-day readout) vs flatten control; 3 vs 7 days | ✅ |
 | 5 | How to encode categories? | one-hot vs embeddings; ± flight-number embedding | ⏳ |
 | 6 | How much regularisation? | dropout, weight decay, early stopping | ⏳ |
 | 7 | Which hybrid? | A: NN representation → XGBoost/LR · B: stacking · C: residual; for A: out-of-fold vs split-train vs naive | ⏳ |
@@ -208,3 +208,58 @@ The main run falls between the two controls, as it should. Using day D's weather
 4. **The weather model overfits even faster** (best at epoch 1–2, down to 0.2759 by epoch 5). Another input for Stage 6.
 
 **Decision:** Keep **daily weather (≤ cutoff) in the origin branch**. Perfect forecast stays an upper-bound result only. New best: **val AP 0.3238 ± 0.0078**.
+
+### Stage 4: Which sequence encoder?
+
+**Question:** Which encoder should read the history windows: a GRU (recurrent) or a 1D CNN (convolution over days)? And does modelling the order of days matter at all?
+
+**Setup:** `configs/stage4/*.yaml`. Stage 3 winner (origin + route branches, daily weather), 3 seeds each. Encoders:
+
+- `gru`: GRU, hidden size 32, final hidden state.
+- `cnn`: two Conv1d layers (kernel 3, 32 channels), then mean- and max-pooling over days.
+- `flat` (control): flatten the window and apply one dense layer. It sees every day's values but has no built-in notion of order or recency.
+- `cnn_last` (added after the first results): same CNN, but reads the output at the last day (D−1) instead of pooling.
+
+GRU and pooled CNN were also run with a 7-day window, because Stage 2 chose 3 days with the GRU and no weather. A CNN might have used a longer window better.
+
+**Validation results (Sep–Oct 2013):**
+
+| Experiment | Model | Runs | Val AP (mean ± std) | AP lift | Val ROC-AUC | Val F1 | Params | Train time / seed |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| gru_3d | nn_gru | 3 | **0.3238 ± 0.0078** | 2.06× | 0.6867 | 0.3628 | 21,465 | 6 s |
+| gru_7d | nn_gru | 3 | 0.3110 ± 0.0068 | 1.98× | 0.6766 | 0.3528 | 21,465 | 8 s |
+| cnn_3d | nn_cnn | 3 | 0.2852 ± 0.0093 | 1.82× | 0.6814 | 0.3543 | 25,305 | 69 s |
+| cnn_7d | nn_cnn | 3 | 0.2701 ± 0.0142 | 1.72× | 0.6648 | 0.3437 | 25,305 | 87 s |
+| cnn_last_3d | nn_cnn_last | 3 | 0.3147 ± 0.0170 | 2.00× | 0.6888 | 0.3625 | 21,209 | 77 s |
+| flat_3d (control) | nn_flat | 3 | 0.2969 ± 0.0122 | 1.89× | 0.6829 | 0.3577 | 15,001 | 2 s |
+
+**Same-seed comparison against gru_3d** (val AP difference, seeds 42 / 43 / 44):
+
+| Experiment | Seed 42 | Seed 43 | Seed 44 |
+|---|---:|---:|---:|
+| gru_7d | −0.0148 | −0.0159 | −0.0079 |
+| cnn_3d | −0.0569 | −0.0258 | −0.0333 |
+| cnn_7d | −0.0668 | −0.0345 | −0.0599 |
+| cnn_last_3d | −0.0114 | −0.0250 | +0.0089 |
+| flat_3d | −0.0498 | −0.0188 | −0.0123 |
+
+**Fixed-epoch check** (mean val AP of 3 seeds):
+
+| Experiment | Epoch 1 | Epoch 2 | Epoch 3 | Epoch 5 |
+|---|---:|---:|---:|---:|
+| gru_3d | 0.3180 | 0.3228 | 0.2986 | 0.2759 |
+| gru_7d | 0.3106 | 0.3092 | 0.2896 | 0.2752 |
+| cnn_3d | 0.2852 | 0.2685 | 0.2649 | 0.2554 |
+| cnn_7d | 0.2699 | 0.2627 | 0.2607 | 0.2529 |
+| flat_3d | 0.2967 | 0.2912 | 0.2859 | 0.2816 |
+
+**Findings:**
+
+1. **The GRU is the best encoder.** It has the highest mean AP and beats the pooled CNN and the flatten control in every seed. It is also the fastest of the sequence encoders on CPU (about 6 s per run vs 70–90 s for the CNNs).
+2. **Order matters.** The GRU beats the order-blind flatten control by +0.027 AP. Reading the days as a sequence is worth more than just seeing all their values.
+3. **The pooled CNN loses because pooling throws away recency.** It scored even below the flatten control. Mean/max pooling over days forgets *which* day a pattern came from, but Stage 3 showed that the most recent day (D−1) carries the weather signal. Reading the CNN at the last day instead of pooling raises it from 0.2852 to 0.3147, which recovers most of the gap. This variant was added *after* the first results to test this explanation.
+4. **The CNN with last-day readout is close to the GRU but less reliable.** Its seed spread is about twice the GRU's (± 0.017). It wins one seed and loses two, and it trains about 10× slower here. There is no reason to prefer it.
+5. **3 days is still right with weather.** The GRU at 7 days is worse in every seed (−0.013 mean). This confirms Stage 2's choice now that weather is included.
+6. **Every model peaks at epoch 1–2.** Fast overfitting does not depend on the encoder, so Stage 6 is the place to deal with it.
+
+**Decision:** Keep the **GRU encoder** with a **3-day window**. Best remains **val AP 0.3238 ± 0.0078**.
