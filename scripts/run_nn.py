@@ -46,26 +46,32 @@ def shift_days(table, s: int):
     return dataclasses.replace(table, values=vals)
 
 
-def prepare(cfg: dict):
+def prepare(cfg: dict, with_test: bool = False):
+    """Build train/validation inputs. with_test=True also returns the test
+    split as a fifth value; only Stage 8 (scripts/run_final.py) asks for it."""
     df = load_flights()
     tables = load_daily_tables()
     if cfg["weather_shift"]:  # timing control only, see Stage 3
         tables["weather"] = shift_days(tables["weather"], cfg["weather_shift"])
     train = df[df["split"] == "train"].reset_index(drop=True)
     val = df[df["split"] == "validation"].reset_index(drop=True)
+    test = df[df["split"] == "test"].reset_index(drop=True)
     numeric = list(P1_NUMERIC)
     if cfg["forecast"]:  # rule R8: upper-bound experiment only
-        train, val = forecast_inputs(train, val)
+        train, val, test = forecast_inputs(train, val, test)
         numeric += FORECAST_INPUTS
     categorical = ["carrier", "origin", "dest_grouped"] + (["flight"] if cfg["flight_embedding"] else [])
     enc = StaticEncoder(categorical, numeric).fit(train)
     out = {}
-    for name, part in [("train", train), ("val", val)]:
+    parts = [("train", train), ("val", val)] + ([("test", test)] if with_test else [])
+    for name, part in parts:
         cat, num = enc.transform(part)
         seq = build_sequences(part, tables, cfg["window"], use_weather=cfg["weather"])
         seqs = {b: seq[b] for b in cfg["branches"]}
         out[name] = make_batchable(cat, num, seqs, part["y"].to_numpy())
     dims = {b: out["train"].seqs[b].shape[-1] for b in cfg["branches"]}
+    if with_test:
+        return enc, out["train"], out["val"], dims, out["test"]
     return enc, out["train"], out["val"], dims
 
 

@@ -1,0 +1,10 @@
+stage: 8
+experiment: final_test
+# The selected model: Stage 6 winner (unchanged since Stage 7)
+branches: [origin, route]
+window: 3
+weather: true
+encoder: gru
+lr: 0.0003
+seeds: [42, 43, 44]
+notes: Scored once on the test split (Nov-Dec 2013)
