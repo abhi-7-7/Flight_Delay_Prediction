@@ -118,9 +118,14 @@ ENCODERS = {"gru": GRUEncoder, "cnn": CNNEncoder, "flat": FlatEncoder,
 class FlightNet(nn.Module):
     def __init__(self, cards: list[int], n_num: int, seq_dims: dict[str, int],
                  encoder: str = "gru", hidden: int = 32, static_hidden: int = 64,
-                 head_hidden: int = 64, dropout: float = 0.2, window: int | None = None):
+                 head_hidden: int = 64, dropout: float = 0.2, window: int | None = None,
+                 one_hot: bool = False):
         super().__init__()
-        self.embs = nn.ModuleList(nn.Embedding(c, min(16, (c + 1) // 2)) for c in cards)
+        if one_hot:  # Stage 5 control: fixed identity vectors instead of learned embeddings
+            self.embs = nn.ModuleList(nn.Embedding.from_pretrained(torch.eye(c), freeze=True)
+                                      for c in cards)
+        else:
+            self.embs = nn.ModuleList(nn.Embedding(c, min(16, (c + 1) // 2)) for c in cards)
         emb_dim = sum(e.embedding_dim for e in self.embs)
         self.static = nn.Sequential(nn.Linear(emb_dim + n_num, static_hidden), nn.ReLU(),
                                     nn.Dropout(dropout))

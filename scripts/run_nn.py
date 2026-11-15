@@ -28,7 +28,7 @@ from phase2.weather import FORECAST_INPUTS, forecast_inputs  # noqa: E402
 
 DEFAULTS = {
     "branches": ["origin", "route"], "window": 14, "weather": False, "weather_shift": 0, "forecast": False,
-    "flight_embedding": False, "encoder": "gru", "hidden": 32, "dropout": 0.2,
+    "flight_embedding": False, "one_hot": False, "encoder": "gru", "hidden": 32, "dropout": 0.2,
     "lr": 1e-3, "weight_decay": 1e-4, "batch_size": 1024, "max_epochs": 25,
     "patience": 4, "seeds": [42, 43, 44],
 }
@@ -78,7 +78,8 @@ def main(config_path: str) -> None:
     for seed in cfg["seeds"]:
         seed_everything(seed)
         model = FlightNet(enc.cardinalities(), len(enc.numeric), dims, encoder=cfg["encoder"],
-                          hidden=cfg["hidden"], dropout=cfg["dropout"], window=cfg["window"])
+                          hidden=cfg["hidden"], dropout=cfg["dropout"], window=cfg["window"],
+                          one_hot=cfg["one_hot"])
         n_params = sum(p.numel() for p in model.parameters())
         info = train_model(model, train, val, seed=seed, lr=cfg["lr"],
                            weight_decay=cfg["weight_decay"], batch_size=cfg["batch_size"],
