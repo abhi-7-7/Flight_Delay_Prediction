@@ -119,3 +119,23 @@ def perfect_forecast(flights: pd.DataFrame, hourly: pd.DataFrame | None = None,
     merged = key.merge(pf, on=["origin", "dep_hour"], how="left")
     merged.index = flights.index
     return merged[FORECAST_COLS]
+
+
+FORECAST_INPUTS = FORECAST_COLS + ["pf_observed"]
+
+
+def forecast_inputs(train: pd.DataFrame, *others: pd.DataFrame) -> list[pd.DataFrame]:
+    """Make the perfect-forecast columns usable as network inputs (Stage 3).
+
+    Adds a `pf_observed` flag (1 when every forecast value is present) and
+    fills the few gaps with training-split means, so the fill never uses
+    validation or test values. Returns new frames in the order given.
+    """
+    fill = train[FORECAST_COLS].mean()
+    out = []
+    for df in (train, *others):
+        df = df.copy()
+        df["pf_observed"] = df[FORECAST_COLS].notna().all(axis=1).astype(float)
+        df[FORECAST_COLS] = df[FORECAST_COLS].fillna(fill)
+        out.append(df)
+    return out

@@ -15,7 +15,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from phase2.constants import ARTIFACTS  # noqa: E402
+from phase2.constants import ARTIFACTS, P1_NUMERIC  # noqa: E402
 from phase2.features import load_daily_tables, load_flights  # noqa: E402
 from phase2.metrics import validation_metrics  # noqa: E402
 from phase2.nn import (  # noqa: E402
@@ -23,9 +23,10 @@ from phase2.nn import (  # noqa: E402
 )
 from phase2.sequences import build_sequences  # noqa: E402
 from phase2.tracking import append_result, load_config  # noqa: E402
+from phase2.weather import FORECAST_INPUTS, forecast_inputs  # noqa: E402
 
 DEFAULTS = {
-    "branches": ["origin", "route"], "window": 14, "weather": False,
+    "branches": ["origin", "route"], "window": 14, "weather": False, "forecast": False,
     "flight_embedding": False, "encoder": "gru", "hidden": 32, "dropout": 0.2,
     "lr": 1e-3, "weight_decay": 1e-4, "batch_size": 1024, "max_epochs": 25,
     "patience": 4, "seeds": [42, 43, 44],
@@ -37,8 +38,12 @@ def prepare(cfg: dict):
     tables = load_daily_tables()
     train = df[df["split"] == "train"].reset_index(drop=True)
     val = df[df["split"] == "validation"].reset_index(drop=True)
+    numeric = list(P1_NUMERIC)
+    if cfg["forecast"]:  # rule R8: upper-bound experiment only
+        train, val = forecast_inputs(train, val)
+        numeric += FORECAST_INPUTS
     categorical = ["carrier", "origin", "dest_grouped"] + (["flight"] if cfg["flight_embedding"] else [])
-    enc = StaticEncoder(categorical).fit(train)
+    enc = StaticEncoder(categorical, numeric).fit(train)
     out = {}
     for name, part in [("train", train), ("val", val)]:
         cat, num = enc.transform(part)
@@ -54,7 +59,7 @@ def main(config_path: str) -> None:
     torch.set_num_threads(cfg.get("threads", torch.get_num_threads()))
     enc, train, val, dims = prepare(cfg)
     print(f"== {cfg['experiment']}  branches={cfg['branches']}  window={cfg['window']}  "
-          f"weather={cfg['weather']}  encoder={cfg['encoder']}")
+          f"weather={cfg['weather']}  forecast={cfg['forecast']}  encoder={cfg['encoder']}")
     for seed in cfg["seeds"]:
         seed_everything(seed)
         model = FlightNet(enc.cardinalities(), len(enc.numeric), dims, encoder=cfg["encoder"],
