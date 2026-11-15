@@ -1,0 +1,9 @@
+stage: 6
+experiment: lr_3e-4_window_5d
+branches: [origin, route]
+window: 5
+weather: true
+encoder: gru
+seeds: [42, 43, 44]
+lr: 0.0003
+notes: Recheck of the Stage 2 window choice at the smaller learning rate
