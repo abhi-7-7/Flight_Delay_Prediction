@@ -1,0 +1,9 @@
+model,month,base_rate,test_ap,test_roc_auc
+final_network,11,0.1810,0.2335,0.5900
+final_network,12,0.3355,0.4729,0.6369
+xgb_phase1_lags,11,0.1810,0.2558,0.6215
+xgb_phase1_lags,12,0.3355,0.4435,0.6253
+hybrid_B_stacking,11,0.1810,0.2435,0.6086
+hybrid_B_stacking,12,0.3355,0.4735,0.6427
+logreg_phase1,11,0.1810,0.2563,0.6238
+logreg_phase1,12,0.3355,0.4248,0.6082

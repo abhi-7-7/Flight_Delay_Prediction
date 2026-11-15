@@ -50,7 +50,7 @@ Status key: ⏳ pending · ✅ decided
 | 5 | How to encode categories? | one-hot vs embeddings; ± flight-number embedding | ✅ |
 | 6 | How much regularisation? | dropout, weight decay, early stopping; + learning rate, GRU size, 3 vs 5 days | ✅ |
 | 7 | Which hybrid? | A: NN representation → XGBoost · B: stacking · C: residual; for A: out-of-fold vs split-train vs naive | ✅ |
-| 8 | Final test (run once) | the selected configuration | ⏳ |
+| 8 | Final test (run once) | the selected configuration | ✅ |
 
 Each stage below is filled in from `experiments/results.csv` once its runs are complete.
 
@@ -361,3 +361,39 @@ Stacking weights (logistic regression on logits): network 0.48 / 0.48 / 0.59, XG
 6. **Residual boosting (C) hurts.** 400 trees fitting the network's errors on training months learn corrections that do not carry over to autumn. This is the same shift again.
 
 **Decision:** Selection is on validation AP (rule R10), so the **network alone** is the final model (0.3262 ± 0.0058). **Stacking (B)** is close enough, and more stable, that it is also scored on the test split in Stage 8 as a secondary result. This is declared here, before the test split is used, and it does not change the selected model.
+
+### Stage 8: Final test (Nov–Dec 2013, run once)
+
+**Setup:** `configs/stage8/final.yaml`, `scripts/run_final.py`. The selected network (Stage 6) was retrained with seeds 42 / 43 / 44 exactly as during selection (training split, early stopping on validation) and scored once on the test split. The decision threshold is the one that maximised F1 on validation (rule R10). Stacking (declared in Stage 7), XGBoost + lags (Stage 0 target) and Phase 1's logistic regression were scored on the same months for comparison. No choice was changed after seeing these results. Raw numbers: `experiments/final_test.csv`, `experiments/final_test_by_month.csv`.
+
+**Test results** (25.8% of test flights delayed; "mean of seeds" = average of the 3 seeds' probabilities):
+
+| Model | Role | Test AP | AP lift | Test ROC-AUC | Precision | Recall | F1 | Accuracy at val threshold | Accuracy at 0.5 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| **Network (selected)** | final model | **0.3514** | 1.36× | 0.6172 | 0.375 | 0.306 | 0.337 | 68.9% | 74.1% |
+| Stacking (hybrid B) | secondary, declared in Stage 7 | 0.3603 | 1.39× | 0.6313 | 0.376 | 0.357 | 0.366 | 68.1% | 74.2% |
+| XGBoost + lags | Stage 0 target | 0.3579 | 1.39× | 0.6323 | 0.338 | 0.579 | 0.427 | 59.9% | 74.0% |
+| Logistic regression (Phase 1) | reference, 1 run | 0.3361 | 1.30× | 0.6071 | 0.341 | 0.441 | 0.385 | 63.6% | 73.8% |
+| Always "on time" | – | – | – | 0.5 | – | 0 | 0 | 74.2% | 74.2% |
+
+Per-seed test AP of the network: 0.3492 / 0.3541 / 0.3424.
+
+**By month (test AP, mean of seeds):**
+
+| Model | November (18.1% delayed) | December (33.6% delayed) |
+|---|---:|---:|
+| Network | 0.2335 | **0.4729** |
+| Stacking | 0.2435 | **0.4735** |
+| XGBoost + lags | 0.2558 | 0.4435 |
+| Logistic regression | **0.2563** | 0.4248 |
+
+**Findings:**
+
+1. **The validation advantage did not carry over to the test months.** On validation the network led XGBoost + lags by +0.085 AP. On test it is 0.007 AP *behind* (0.3514 vs 0.3579), and its ROC-AUC is lower. Stacking is the best model on test (0.3603), but it was not the selected model, and it is not re-selected now.
+2. **The network does better in December and worse in November.** In December, the high-delay month, the network and stacking beat both tabular models by about +0.03 AP. In November they are about 0.02 behind.
+3. **The model cannot see snowstorms coming.** The worst test days were the December 2013 winter storms (8–17 Dec; up to 78% of flights delayed). The network predicted only 14–26% delay probability on those days. Stage 3 showed the weather gain comes from **weather that persists from D−1 into D** (rain, fog). A storm that starts on day D is not visible at 6 PM on D−1 in observed weather. Only a forecast would show it, and the Stage 3 perfect-forecast upper bound (+0.044 on validation) points to this. The validation months had no snow, so this weakness could not show up during selection.
+4. **The validation score was optimistic.** About 60 configurations were compared on validation, and every network also used validation for early stopping. The best of many validation scores is biased upwards ("winner's curse"). The final model's validation AP (0.326) over-states what it achieves on new months.
+5. **Accuracy is not a useful measure here.** Every model, and the trivial "always on time" rule, scores about 74% at threshold 0.5, because 74% of test flights are on time. At the F1-optimal threshold, the models trade accuracy for catching delays. This is why the project uses AP (rule R10).
+6. **What still holds.** Within a single day, the network ranks flights as well as XGBoost (mean per-day AP difference +0.0002). Excluding the 5 worst days, the two are equal (0.3319 vs 0.3342). The deep model's extra value is in recognising disrupted days, and that depends on the kind of weather event.
+
+**Conclusion:** The final network reaches **test AP 0.351 (1.36× the base rate), ROC-AUC 0.617, F1 0.337**. This is level with a well-built XGBoost model, not better. Stacking the two is the best combination on test (AP 0.360). Learned history and weather sequences help a lot when disruption persists from the previous day (validation, December). They cannot anticipate disruption that begins on the day itself. The clearest next step is real weather **forecasts** issued before the cutoff, which the perfect-forecast experiment suggests are worth more than any architecture change tested here.
