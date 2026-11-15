@@ -1,0 +1,8 @@
+stage: 2
+experiment: window_1d
+branches: [origin, route]
+window: 1
+weather: false
+encoder: gru
+seeds: [42, 43, 44]
+notes: Origin + route history, 1-day window
