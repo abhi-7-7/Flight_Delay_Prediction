@@ -6,6 +6,8 @@
     route branch:   sequence encoder over the route history window
     head:           concat -> dense + dropout -> logit
 
+Sequence encoders (Stage 4): GRU, 1D CNN, or a flatten + dense control.
+
 Any history branch can be switched off (Stage 1). Training uses binary
 cross-entropy, AdamW (weight decay) and early stopping on validation AP
 (rule R10), restoring the best epoch.
@@ -84,19 +86,33 @@ class CNNEncoder(nn.Module):
         return torch.cat([h.mean(-1), h.amax(-1)], dim=-1)
 
 
-ENCODERS = {"gru": GRUEncoder, "cnn": CNNEncoder}
+class FlatEncoder(nn.Module):
+    """Control with no notion of order over days: flatten the window and
+    apply one dense layer. Needs a fixed window length."""
+    def __init__(self, n_in: int, hidden: int, window: int):
+        super().__init__()
+        self.net = nn.Sequential(nn.Flatten(), nn.Linear(n_in * window, hidden), nn.ReLU())
+        self.out_dim = hidden
+
+    def forward(self, x):
+        return self.net(x)
+
+
+ENCODERS = {"gru": GRUEncoder, "cnn": CNNEncoder, "flat": FlatEncoder}
 
 
 class FlightNet(nn.Module):
     def __init__(self, cards: list[int], n_num: int, seq_dims: dict[str, int],
                  encoder: str = "gru", hidden: int = 32, static_hidden: int = 64,
-                 head_hidden: int = 64, dropout: float = 0.2):
+                 head_hidden: int = 64, dropout: float = 0.2, window: int | None = None):
         super().__init__()
         self.embs = nn.ModuleList(nn.Embedding(c, min(16, (c + 1) // 2)) for c in cards)
         emb_dim = sum(e.embedding_dim for e in self.embs)
         self.static = nn.Sequential(nn.Linear(emb_dim + n_num, static_hidden), nn.ReLU(),
                                     nn.Dropout(dropout))
-        self.encoders = nn.ModuleDict({k: ENCODERS[encoder](d, hidden) for k, d in seq_dims.items()})
+        extra = {"window": window} if encoder == "flat" else {}
+        self.encoders = nn.ModuleDict({k: ENCODERS[encoder](d, hidden, **extra)
+                                       for k, d in seq_dims.items()})
         fused = static_hidden + sum(e.out_dim for e in self.encoders.values())
         self.head = nn.Sequential(nn.Linear(fused, head_hidden), nn.ReLU(), nn.Dropout(dropout))
         self.out = nn.Linear(head_hidden, 1)

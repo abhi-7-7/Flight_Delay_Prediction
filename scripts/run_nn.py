@@ -78,7 +78,8 @@ def main(config_path: str) -> None:
     for seed in cfg["seeds"]:
         seed_everything(seed)
         model = FlightNet(enc.cardinalities(), len(enc.numeric), dims, encoder=cfg["encoder"],
-                          hidden=cfg["hidden"], dropout=cfg["dropout"])
+                          hidden=cfg["hidden"], dropout=cfg["dropout"], window=cfg["window"])
+        n_params = sum(p.numel() for p in model.parameters())
         info = train_model(model, train, val, seed=seed, lr=cfg["lr"],
                            weight_decay=cfg["weight_decay"], batch_size=cfg["batch_size"],
                            max_epochs=cfg["max_epochs"], patience=cfg["patience"],
@@ -89,7 +90,8 @@ def main(config_path: str) -> None:
             "stage": cfg["stage"], "experiment": cfg["experiment"], "model": f"nn_{cfg['encoder']}",
             "seed": seed, "config_path": cfg["_path"], "config_hash": cfg["_hash"],
             "n_train": len(train), "n_val": len(val), "train_seconds": round(info["seconds"], 1),
-            "notes": f"best_epoch={info['best_epoch']}/{info['epochs_run']}; {cfg.get('notes', '')}",
+            "notes": (f"best_epoch={info['best_epoch']}/{info['epochs_run']}; params={n_params}; "
+                      f"{cfg.get('notes', '')}"),
             **m,
         })
         tag = f"{cfg['stage']}_{cfg['experiment']}_nn_{cfg['encoder']}_s{seed}"
