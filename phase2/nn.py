@@ -72,18 +72,31 @@ class GRUEncoder(nn.Module):
 
 
 class CNNEncoder(nn.Module):
-    """1D CNN over days: two conv layers, then mean- and max-pooling."""
-    def __init__(self, n_in: int, hidden: int, kernel: int = 3):
+    """1D CNN over days: two conv layers, then a readout.
+
+    pool="meanmax": mean- and max-pool over days (forgets which day a
+    pattern came from). pool="last": take the output at the last day (D-1),
+    whose receptive field covers the most recent days in order.
+    """
+    def __init__(self, n_in: int, hidden: int, kernel: int = 3, pool: str = "meanmax"):
         super().__init__()
         self.net = nn.Sequential(
             nn.Conv1d(n_in, hidden, kernel, padding=kernel // 2), nn.ReLU(),
             nn.Conv1d(hidden, hidden, kernel, padding=kernel // 2), nn.ReLU(),
         )
-        self.out_dim = 2 * hidden
+        self.pool = pool
+        self.out_dim = 2 * hidden if pool == "meanmax" else hidden
 
     def forward(self, x):
         h = self.net(x.transpose(1, 2))
+        if self.pool == "last":
+            return h[..., -1]
         return torch.cat([h.mean(-1), h.amax(-1)], dim=-1)
+
+
+class CNNLastEncoder(CNNEncoder):
+    def __init__(self, n_in: int, hidden: int):
+        super().__init__(n_in, hidden, pool="last")
 
 
 class FlatEncoder(nn.Module):
@@ -98,7 +111,8 @@ class FlatEncoder(nn.Module):
         return self.net(x)
 
 
-ENCODERS = {"gru": GRUEncoder, "cnn": CNNEncoder, "flat": FlatEncoder}
+ENCODERS = {"gru": GRUEncoder, "cnn": CNNEncoder, "flat": FlatEncoder,
+            "cnn_last": CNNLastEncoder}
 
 
 class FlightNet(nn.Module):
