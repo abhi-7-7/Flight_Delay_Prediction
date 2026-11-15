@@ -24,7 +24,14 @@ Hybrids (all scored on validation only):
      got wrong
 """
 import argparse
+import os
 import sys
+
+# PyTorch and XGBoost each bring their own OpenMP runtime on macOS, and using
+# both in one process with default threading crashes (segfault). Starting
+# single-threaded and then setting thread counts explicitly avoids it.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+N_THREADS = os.cpu_count() or 1
 import time
 from pathlib import Path
 
@@ -68,7 +75,7 @@ def fit_net(cfg, enc, dims, train: Batchable, val: Batchable, seed: int) -> Flig
 def xgb_fit_predict(X_tr, y_tr, X_va, seed, numeric, margin_tr=None, margin_va=None):
     """XGBoost with the Phase 1 preprocessing; optional base_margin (hybrid C)."""
     categorical, _ = FEATURE_SETS["phase1_lags"]
-    pipe = make_model("xgboost", {}, categorical, numeric, seed)
+    pipe = make_model("xgboost", {"n_jobs": N_THREADS}, categorical, numeric, seed)
     prep, model = pipe.named_steps["prep"], pipe.named_steps["model"]
     Xt = prep.fit_transform(X_tr)
     model.fit(Xt, y_tr, base_margin=margin_tr)
@@ -92,6 +99,7 @@ def log(cfg, name, seed, y_val, prob, n_train, seconds, notes=""):
 
 def main(config_path: str) -> None:
     cfg = {**DEFAULTS, **load_config(config_path)}
+    torch.set_num_threads(N_THREADS)
     enc, train, val, dims = prepare(cfg)
     df = load_flights()
     tr_df = df[df["split"] == "train"].reset_index(drop=True)
