@@ -47,7 +47,7 @@ Status key: ⏳ pending · ✅ decided
 | 2 | How far back? | 7 vs 14 days (+ 1, 3, 5 added to bracket the best) | ✅ |
 | 3 | How much is weather worth? | none / daily (≤ cutoff) / + perfect forecast (upper bound); + 2 timing controls | ✅ |
 | 4 | Which sequence encoder? | GRU vs 1D CNN (pooled / last-day readout) vs flatten control; 3 vs 7 days | ✅ |
-| 5 | How to encode categories? | one-hot vs embeddings; ± flight-number embedding | ⏳ |
+| 5 | How to encode categories? | one-hot vs embeddings; ± flight-number embedding | ✅ |
 | 6 | How much regularisation? | dropout, weight decay, early stopping | ⏳ |
 | 7 | Which hybrid? | A: NN representation → XGBoost/LR · B: stacking · C: residual; for A: out-of-fold vs split-train vs naive | ⏳ |
 | 8 | Final test (run once) | the selected configuration | ⏳ |
@@ -263,3 +263,28 @@ GRU and pooled CNN were also run with a 7-day window, because Stage 2 chose 3 da
 6. **Every model peaks at epoch 1–2.** Fast overfitting does not depend on the encoder, so Stage 6 is the place to deal with it.
 
 **Decision:** Keep the **GRU encoder** with a **3-day window**. Best remains **val AP 0.3238 ± 0.0078**.
+
+### Stage 5: How to encode categories?
+
+**Question:** Should carrier, origin and grouped destination enter the network as learned embeddings or as one-hot vectors? Does adding the flight number (about 3,800 values) help?
+
+**Setup:** `configs/stage5/*.yaml`. Stage 4 winner (GRU, 3-day window, daily weather), 3 seeds each. One-hot is a frozen identity embedding, so only the encoding of the categories changes. Rare categories (fewer than 20 training flights) share one "rare" slot in both encodings, as in Phase 1.
+
+**Validation results (Sep–Oct 2013):**
+
+| Experiment | Model | Runs | Val AP (mean ± std) | AP lift | Val ROC-AUC | Val F1 | Params |
+|---|---|---:|---:|---:|---:|---:|---:|
+| embeddings | nn_gru | 3 | **0.3238 ± 0.0078** | 2.06× | 0.6867 | 0.3628 | 21,465 |
+| one_hot | nn_gru | 3 | 0.3150 ± 0.0112 | 2.01× | 0.6857 | 0.3629 | 34,330 |
+| embeddings_flight | nn_gru | 3 | 0.3184 ± 0.0118 | 2.03× | 0.6886 | 0.3627 | 53,657 |
+| one_hot_flight | nn_gru | 3 | 0.3071 ± 0.0091 | 1.96× | 0.6829 | 0.3606 | 3,953,706 |
+
+**Same-seed difference against embeddings** (seeds 42 / 43 / 44): one_hot −0.0054 / −0.0082 / −0.0128; embeddings_flight −0.0008 / −0.0085 / −0.0070; one_hot_flight −0.0172 / −0.0119 / −0.0209.
+
+**Findings:**
+
+1. **Embeddings beat one-hot in every seed** (+0.009 AP on average) with fewer parameters. Small dense vectors let similar carriers and airports share what they learn.
+2. **The flight number does not help.** It adds 32k parameters (embedding) or 3.9M (one-hot) and lowers AP in every seed. Most flight numbers have few training flights, and what they do carry (carrier, route, time of day) is already in the model.
+3. The differences are small next to Stages 1–4. Category encoding is a minor choice for this problem.
+
+**Decision:** Keep **learned embeddings** for carrier, origin and grouped destination, and **no flight-number input**. Best remains **val AP 0.3238 ± 0.0078**.
