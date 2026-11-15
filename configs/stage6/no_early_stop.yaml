@@ -7,4 +7,4 @@ encoder: gru
 seeds: [42, 43, 44]
 max_epochs: 10
 early_stopping: false
-notes: Early stopping off: 10 fixed epochs, last epoch kept
+notes: "Early stopping off - 10 fixed epochs, last epoch kept"
