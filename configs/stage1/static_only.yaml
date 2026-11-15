@@ -1,0 +1,8 @@
+stage: 1
+experiment: static_only
+branches: []
+window: 14
+weather: false
+encoder: gru
+seeds: [42, 43, 44]
+notes: No history branch (static embeddings + Phase 1 numerics only)

@@ -1,0 +1,8 @@
+stage: 1
+experiment: route_only
+branches: [route]
+window: 14
+weather: false
+encoder: gru
+seeds: [42, 43, 44]
+notes: Route history branch only
