@@ -1,0 +1,10 @@
+stage: 5
+experiment: one_hot
+branches: [origin, route]
+window: 3
+weather: true
+encoder: gru
+seeds: [42, 43, 44]
+one_hot: true
+flight_embedding: false
+notes: One-hot (frozen identity) instead of learned embeddings

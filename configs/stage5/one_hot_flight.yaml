@@ -1,0 +1,10 @@
+stage: 5
+experiment: one_hot_flight
+branches: [origin, route]
+window: 3
+weather: true
+encoder: gru
+seeds: [42, 43, 44]
+one_hot: true
+flight_embedding: true
+notes: One-hot including flight number
