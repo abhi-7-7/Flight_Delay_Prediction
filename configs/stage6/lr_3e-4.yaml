@@ -1,0 +1,9 @@
+stage: 6
+experiment: lr_3e-4
+branches: [origin, route]
+window: 3
+weather: true
+encoder: gru
+seeds: [42, 43, 44]
+lr: 0.0003
+notes: Smaller learning rate, slower fitting

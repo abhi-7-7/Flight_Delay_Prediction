@@ -1,0 +1,9 @@
+stage: 6
+experiment: dropout_06
+branches: [origin, route]
+window: 3
+weather: true
+encoder: gru
+seeds: [42, 43, 44]
+dropout: 0.6
+notes: Much more dropout
