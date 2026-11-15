@@ -43,7 +43,7 @@ Status key: ⏳ pending · ✅ decided
 | Stage | Question | Candidates | Status |
 |---|---|---|---|
 | 0 | What must the deep model beat? | Phase 1 LR / XGBoost; + hand-made lag features | ✅ |
-| 1 | Which history branches help? | none / origin / route / origin + route | ⏳ |
+| 1 | Which history branches help? | none / origin / route / origin + route | ✅ |
 | 2 | How far back? | 7 vs 14 days | ⏳ |
 | 3 | How much is weather worth? | none / daily (≤ cutoff) / + perfect forecast (upper bound) | ⏳ |
 | 4 | Which sequence encoder? | GRU vs 1D CNN | ⏳ |
@@ -78,3 +78,38 @@ Each stage below is filled in from `experiments/results.csv` once its runs are c
 4. **The gain from history is modest.** Under the 6 PM D−1 cutoff, recent delay history adds about +0.008 AP. Any deep sequence model has to beat this to justify itself.
 
 **Decision:** The target to beat is **XGBoost + hand-made lags (val AP 0.2413 ± 0.0018)**. Every later stage is compared against this row, not against Phase 1.
+
+### Stage 1: Which history branches help?
+
+**Question:** Does the network gain from reading recent history as a sequence, and from which level (origin airport, route, or both)?
+
+**Setup:** `configs/stage1/*.yaml`. Same network for all four runs (static branch with embeddings for carrier / origin / grouped destination + Phase 1 numerics; GRU encoders, hidden size 32; dropout 0.2; AdamW, weight decay 1e-4). 14-day window, no weather, no flight-number embedding. 3 seeds each. Early stopping on validation AP (patience 4).
+
+**Validation results (Sep–Oct 2013):**
+
+| Experiment | Model | Runs | Val AP (mean ± std) | AP lift | Val ROC-AUC | Val F1 |
+|---|---|---:|---:|---:|---:|---:|
+| static_only | nn_gru | 3 | 0.2394 ± 0.0052 | 1.53× | 0.6456 | 0.3272 |
+| origin_only | nn_gru | 3 | 0.2586 ± 0.0015 | 1.65× | 0.6662 | 0.3426 |
+| route_only | nn_gru | 3 | 0.2522 ± 0.0027 | 1.61× | 0.6585 | 0.3356 |
+| origin_route | nn_gru | 3 | **0.2645 ± 0.0066** | 1.69× | 0.6745 | 0.3507 |
+| _Stage 0 target: XGBoost + lags_ | xgboost | 3 | 0.2413 ± 0.0018 | 1.54× | 0.6494 | 0.3304 |
+
+**Check for early-stopping bias.** The networks choose their best epoch on validation, which the tabular baselines do not. Validation AP at a **fixed** epoch (mean of 3 seeds, from `artifacts/curves/`):
+
+| Experiment | Epoch 1 | Epoch 3 | Epoch 5 |
+|---|---:|---:|---:|
+| static_only | 0.2369 | 0.2315 | 0.2318 |
+| origin_only | 0.2476 | 0.2538 | 0.2383 |
+| route_only | 0.2403 | 0.2400 | 0.2452 |
+| origin_route | 0.2542 | 0.2610 | 0.2429 |
+
+**Findings:**
+
+1. **The network on its own adds nothing.** With no history, the network (0.2394) matches XGBoost + lags (0.2413). Embeddings and dense layers on the Phase 1 features are not where the gain comes from.
+2. **Learned history clearly helps.** Origin history adds about +0.019 AP and route history about +0.013. Together they reach **0.2645**, roughly +0.025 over the static network and +0.023 over XGBoost + lags. The same hand-made history summaries gave XGBoost only +0.008 (Stage 0), so the sequence encoders extract more from the same data.
+3. **The two branches complement each other.** Origin history (airport-wide disruption) and route history (route and destination conditions) each help separately, and more together.
+4. **The gain is not an early-stopping artefact.** At a fixed epoch 3, origin + route still beats static only by about 0.03. Early stopping adds a little (0.2610 → 0.2645) but does not change the ranking.
+5. **The networks overfit quickly.** Validation AP peaks at epoch 2–3 and falls by epoch 5, even though training loss keeps improving. The likely cause is the shift between training months (26% delayed) and validation months (16% delayed). This feeds directly into Stage 6 (regularisation).
+
+**Decision:** Keep **both history branches (origin + route)** in the model. New best: **val AP 0.2645 ± 0.0066**.
