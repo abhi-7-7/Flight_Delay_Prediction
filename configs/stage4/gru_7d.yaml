@@ -1,0 +1,8 @@
+stage: 4
+experiment: gru_7d
+branches: [origin, route]
+window: 7
+weather: true
+encoder: gru
+seeds: [42, 43, 44]
+notes: gru encoder, 7-day window, daily weather

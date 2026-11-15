@@ -1,0 +1,8 @@
+stage: 4
+experiment: cnn_7d
+branches: [origin, route]
+window: 7
+weather: true
+encoder: cnn
+seeds: [42, 43, 44]
+notes: cnn encoder, 7-day window, daily weather
