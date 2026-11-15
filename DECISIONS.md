@@ -45,7 +45,7 @@ Status key: ⏳ pending · ✅ decided
 | 0 | What must the deep model beat? | Phase 1 LR / XGBoost; + hand-made lag features | ✅ |
 | 1 | Which history branches help? | none / origin / route / origin + route | ✅ |
 | 2 | How far back? | 7 vs 14 days (+ 1, 3, 5 added to bracket the best) | ✅ |
-| 3 | How much is weather worth? | none / daily (≤ cutoff) / + perfect forecast (upper bound) | ⏳ |
+| 3 | How much is weather worth? | none / daily (≤ cutoff) / + perfect forecast (upper bound); + 2 timing controls | ✅ |
 | 4 | Which sequence encoder? | GRU vs 1D CNN | ⏳ |
 | 5 | How to encode categories? | one-hot vs embeddings; ± flight-number embedding | ⏳ |
 | 6 | How much regularisation? | dropout, weight decay, early stopping | ⏳ |
@@ -158,3 +158,53 @@ Each stage below is filled in from `experiments/results.csv` once its runs are c
 5. **Caveat:** the 3-day window has the largest seed spread (± 0.0092; seed 43 reaches 0.2833). Its lead over 5 days is small and partly within noise. Stage 6 (regularisation) should re-check 3 vs 5 days if it changes how fast the model overfits.
 
 **Decision:** Use a **3-day window** for both branches from Stage 3 on. New best: **val AP 0.2728 ± 0.0092**.
+
+### Stage 3: How much is weather worth?
+
+**Question:** Does origin-airport weather known at the cutoff improve the model? And how much more would a perfect forecast of departure-time weather add?
+
+**Setup:** `configs/stage3/*.yaml`. Stage 2 winner (origin + route GRU, 3-day window), 3 seeds each.
+
+- `no_weather`: same setup as Stage 2's 3-day run.
+- `daily_weather`: the 15 daily summaries (rule R7, hours up to 17:xx on each observation day) are added to every step of the **origin** sequence, with a `weather_obs` flag for days with no reports.
+- `daily_plus_forecast`: also adds the 7 `pf_*` columns (actual weather ±2 h around scheduled departure) to the static inputs. **Upper bound only (rule R8):** this information is not available at 6 PM on D−1.
+
+**Validation results (Sep–Oct 2013):**
+
+| Experiment | Model | Runs | Val AP (mean ± std) | AP lift | Val ROC-AUC | Val F1 |
+|---|---|---:|---:|---:|---:|---:|
+| no_weather | nn_gru | 3 | 0.2728 ± 0.0092 | 1.74× | 0.6786 | 0.3528 |
+| daily_weather | nn_gru | 3 | **0.3238 ± 0.0078** | 2.06× | 0.6867 | 0.3628 |
+| _daily_plus_forecast (upper bound)_ | nn_gru | 3 | _0.3674 ± 0.0061_ | 2.34× | 0.7008 | 0.3824 |
+
+Daily weather improves AP in every seed (+0.067 / +0.037 / +0.050 for seeds 42 / 43 / 44).
+
+**Checking the daily-weather gain.** The gain (+0.051 AP) was larger than all the history gains combined, so it was checked before being accepted.
+
+1. *Where it comes from.* Using the mean prediction of the 3 seeds: the correlation between a day's predicted and actual delay rate rises from 0.35 to 0.59. With the 5 worst validation days removed (12 Sep, 7 Oct, 2 Sep, 11 Oct, 13 Sep), the gain falls from +0.051 to +0.007 AP. Within a single day, ranking does not improve (mean per-day AP change −0.004). **Weather helps the model recognise bad days; it does not help it decide which flights on a given day are delayed.**
+2. *Timing controls* (`configs/stage3/control_*.yaml`, new `weather_shift` option):
+
+| Control | What the last window step shows | Val AP (mean ± std) | Val ROC-AUC |
+|---|---|---:|---:|
+| control_weather_one_day_older | obs-day D−2 (allowed, one day staler) | 0.2803 ± 0.0140 | 0.6542 |
+| daily_weather (main run) | obs-day D−1 (up to 17:59 on D−1) | 0.3238 ± 0.0078 | 0.6867 |
+| control_weather_same_day_leak | obs-day D (**leak**, not allowed) | 0.3828 ± 0.0053 | 0.7045 |
+
+The main run falls between the two controls, as it should. Using day D's weather scores clearly higher (+0.059), so the main run is not seeing day D. Moving the weather one day back removes almost all the gain, so the useful signal is the **most recent** weather, ending just before the cutoff. This fits weather systems that last into the next day (rain or fog on the evening of D−1 continuing into D).
+
+**Fixed-epoch check** (mean val AP of 3 seeds):
+
+| Experiment | Epoch 1 | Epoch 2 | Epoch 3 | Epoch 5 |
+|---|---:|---:|---:|---:|
+| no_weather | 0.2584 | 0.2645 | 0.2701 | 0.2635 |
+| daily_weather | 0.3180 | 0.3228 | 0.2986 | 0.2759 |
+| daily_plus_forecast | 0.3509 | 0.3674 | 0.3548 | 0.3314 |
+
+**Findings:**
+
+1. **Weather known at the cutoff is the largest single gain so far:** +0.051 AP over no weather and +0.083 over the Stage 0 target. It already helps at epoch 1, so it is not an early-stopping effect.
+2. **The gain is episodic.** It comes mostly from a handful of disrupted days. This is a risk for the test split: if November–December has different weather events (e.g. snow, which the validation months never had), the gain may be smaller or larger. Stage 8 should report results per day as well as overall.
+3. **A perfect forecast would be worth about +0.044 AP more** (0.3674). This is the value of good departure-time weather information. It is reported as an upper bound only and is **not** used in later stages.
+4. **The weather model overfits even faster** (best at epoch 1–2, down to 0.2759 by epoch 5). Another input for Stage 6.
+
+**Decision:** Keep **daily weather (≤ cutoff) in the origin branch**. Perfect forecast stays an upper-bound result only. New best: **val AP 0.3238 ± 0.0078**.
