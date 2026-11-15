@@ -48,7 +48,7 @@ Status key: ⏳ pending · ✅ decided
 | 3 | How much is weather worth? | none / daily (≤ cutoff) / + perfect forecast (upper bound); + 2 timing controls | ✅ |
 | 4 | Which sequence encoder? | GRU vs 1D CNN (pooled / last-day readout) vs flatten control; 3 vs 7 days | ✅ |
 | 5 | How to encode categories? | one-hot vs embeddings; ± flight-number embedding | ✅ |
-| 6 | How much regularisation? | dropout, weight decay, early stopping | ⏳ |
+| 6 | How much regularisation? | dropout, weight decay, early stopping; + learning rate, GRU size, 3 vs 5 days | ✅ |
 | 7 | Which hybrid? | A: NN representation → XGBoost/LR · B: stacking · C: residual; for A: out-of-fold vs split-train vs naive | ⏳ |
 | 8 | Final test (run once) | the selected configuration | ⏳ |
 
@@ -288,3 +288,34 @@ GRU and pooled CNN were also run with a 7-day window, because Stage 2 chose 3 da
 3. The differences are small next to Stages 1–4. Category encoding is a minor choice for this problem.
 
 **Decision:** Keep **learned embeddings** for carrier, origin and grouped destination, and **no flight-number input**. Best remains **val AP 0.3238 ± 0.0078**.
+
+### Stage 6: How much regularisation?
+
+**Question:** Every model so far peaks at epoch 1–2 and then gets worse. Which regularisation (dropout, weight decay, smaller model, smaller learning rate, early stopping) controls this best?
+
+**Setup:** `configs/stage6/*.yaml`. Stage 5 winner as `reference` (dropout 0.2, weight decay 1e-4, learning rate 1e-3, GRU hidden 32, early stopping with patience 4). Each other config changes **one** setting. `no_early_stop` trains 10 fixed epochs and keeps the last one. (Its first run failed to start because of a YAML quoting error in the config. It was fixed in a separate commit and re-run; no results were lost or repeated.)
+
+**Validation results (Sep–Oct 2013):**
+
+| Experiment | Change | Runs | Val AP (mean ± std) | Val ROC-AUC | Val F1 | Best epochs (3 seeds) |
+|---|---|---:|---:|---:|---:|---|
+| reference | – | 3 | 0.3238 ± 0.0078 | 0.6867 | 0.3628 | 2, 2, 1 |
+| dropout_04 | dropout 0.4 | 3 | 0.3208 ± 0.0070 | 0.6856 | 0.3624 | 2, 2, 1 |
+| dropout_06 | dropout 0.6 | 3 | 0.3171 ± 0.0116 | 0.6826 | 0.3607 | 2, 2, 2 |
+| wd_1e-2 | weight decay 1e-2 | 3 | 0.3240 ± 0.0074 | 0.6868 | 0.3630 | 2, 2, 1 |
+| wd_1e-1 | weight decay 1e-1 | 3 | 0.3241 ± 0.0077 | 0.6868 | 0.3632 | 2, 2, 1 |
+| hidden_16 | GRU hidden 16 | 3 | 0.3164 ± 0.0058 | 0.6870 | 0.3650 | 2, 2, 3 |
+| **lr_3e-4** | learning rate 3e-4 | 3 | **0.3262 ± 0.0058** | 0.6865 | 0.3645 | 5, 4, 4 |
+| no_early_stop | 10 epochs, keep last | 3 | 0.2595 ± 0.0163 | 0.6520 | 0.3348 | – |
+| lr_3e-4_window_5d | lr 3e-4 and 5-day window | 3 | 0.3181 ± 0.0035 | – | – | 3, 4, 4 |
+
+**Same-seed difference against reference** (seeds 42 / 43 / 44): no_early_stop −0.063 / −0.053 / −0.078; lr_3e-4 −0.0004 / +0.0004 / +0.0069; dropout and weight decay all within ±0.015 with no consistent sign. 5 vs 3 days at lr 3e-4: −0.015 / −0.006 / −0.003.
+
+**Findings:**
+
+1. **Early stopping is the regulariser that matters.** Without it, AP falls by 0.064 and the seed spread doubles. Dropout, weight decay and a smaller GRU change AP by less than the seed noise.
+2. **Why the usual regularisers do not help.** The network is not overfitting in the classic sense (memorising noise). Training months have 26% delayed flights and validation months 16%, and patterns of the summer delay season stop applying in autumn. Stronger penalties cannot fix a change in the data. Stopping before the model fits the summer too closely can.
+3. **A smaller learning rate is slightly better and more stable.** At lr 3e-4 the best epoch moves from 1–2 to 4–5. The model then depends less on one lucky epoch, and the seed spread falls (± 0.0058 vs ± 0.0078). The AP gain (+0.002) is within noise. It is adopted for stability, not for the AP.
+4. **3 days is confirmed again.** At the new learning rate, 5 days is worse in every seed. This settles the caveat left in Stage 2.
+
+**Decision:** Learning rate **3e-4**, early stopping (patience 4) on validation AP, dropout 0.2, weight decay 1e-4, GRU hidden 32, 3-day window. Best: **val AP 0.3262 ± 0.0058**. This is the final deep-learning model; Stage 7 tests whether hybrids can improve on it.
