@@ -1,0 +1,10 @@
+stage: 7
+experiment: hybrids
+# Network settings: the Stage 6 winner
+branches: [origin, route]
+window: 3
+weather: true
+encoder: gru
+lr: 0.0003
+seeds: [42, 43, 44]
+notes: Hybrids A (naive / split / out-of-fold), B stacking, C residual

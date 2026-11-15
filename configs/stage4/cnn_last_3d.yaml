@@ -1,0 +1,8 @@
+stage: 4
+experiment: cnn_last_3d
+branches: [origin, route]
+window: 3
+weather: true
+encoder: cnn_last
+seeds: [42, 43, 44]
+notes: CNN read out at the last day instead of mean/max pooling - tests whether pooling loses recency

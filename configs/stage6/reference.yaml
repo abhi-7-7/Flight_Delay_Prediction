@@ -1,0 +1,11 @@
+stage: 6
+experiment: reference
+branches: [origin, route]
+window: 3
+weather: true
+encoder: gru
+seeds: [42, 43, 44]
+dropout: 0.2
+weight_decay: 0.0001
+lr: 0.001
+notes: Stage 5 winner, unchanged

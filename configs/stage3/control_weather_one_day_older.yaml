@@ -1,0 +1,10 @@
+stage: 3
+experiment: control_weather_one_day_older
+branches: [origin, route]
+window: 3
+weather: true
+weather_shift: 1
+forecast: false
+encoder: gru
+seeds: [42, 43, 44]
+notes: CONTROL - daily weather moved one day back (D-2 and older); allowed but less recent

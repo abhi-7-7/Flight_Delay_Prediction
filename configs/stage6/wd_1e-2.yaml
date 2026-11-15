@@ -1,0 +1,9 @@
+stage: 6
+experiment: wd_1e-2
+branches: [origin, route]
+window: 3
+weather: true
+encoder: gru
+seeds: [42, 43, 44]
+weight_decay: 0.01
+notes: Stronger weight decay

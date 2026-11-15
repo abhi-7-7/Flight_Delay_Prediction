@@ -1,0 +1,10 @@
+stage: 6
+experiment: no_early_stop
+branches: [origin, route]
+window: 3
+weather: true
+encoder: gru
+seeds: [42, 43, 44]
+max_epochs: 10
+early_stopping: false
+notes: "Early stopping off - 10 fixed epochs, last epoch kept"

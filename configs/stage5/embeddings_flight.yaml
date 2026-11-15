@@ -1,0 +1,10 @@
+stage: 5
+experiment: embeddings_flight
+branches: [origin, route]
+window: 3
+weather: true
+encoder: gru
+seeds: [42, 43, 44]
+one_hot: false
+flight_embedding: true
+notes: Learned embeddings plus a flight-number embedding

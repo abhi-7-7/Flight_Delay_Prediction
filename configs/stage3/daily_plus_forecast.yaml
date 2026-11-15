@@ -1,0 +1,9 @@
+stage: 3
+experiment: daily_plus_forecast
+branches: [origin, route]
+window: 3
+weather: true
+forecast: true
+encoder: gru
+seeds: [42, 43, 44]
+notes: UPPER BOUND ONLY (rule R8) - adds actual weather around departure

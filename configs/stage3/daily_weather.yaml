@@ -1,0 +1,9 @@
+stage: 3
+experiment: daily_weather
+branches: [origin, route]
+window: 3
+weather: true
+forecast: false
+encoder: gru
+seeds: [42, 43, 44]
+notes: Daily weather summaries known by 6 PM D-1, added to the origin sequence

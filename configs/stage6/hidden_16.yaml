@@ -1,0 +1,9 @@
+stage: 6
+experiment: hidden_16
+branches: [origin, route]
+window: 3
+weather: true
+encoder: gru
+seeds: [42, 43, 44]
+hidden: 16
+notes: Smaller GRU (capacity control)
