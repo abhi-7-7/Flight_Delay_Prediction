@@ -1,0 +1,6 @@
+stage: 0
+experiment: phase1_features
+model: logreg
+features: phase1
+seeds: [42]
+notes: Reproduction of the Phase 1 selected model (LogisticRegression max_iter=1000)

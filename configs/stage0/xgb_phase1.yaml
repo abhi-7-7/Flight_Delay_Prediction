@@ -1,0 +1,6 @@
+stage: 0
+experiment: phase1_features
+model: xgboost
+features: phase1
+seeds: [42, 43, 44]
+notes: Reproduction of the Phase 1 XGBoost configuration
