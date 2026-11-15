@@ -1,0 +1,1 @@
+run_id,timestamp_utc,git_commit,stage,experiment,model,seed,config_path,config_hash,n_train,n_val,val_base_rate,val_ap,val_ap_lift,val_roc_auc,val_threshold,val_precision,val_recall,val_f1,train_seconds,notes
