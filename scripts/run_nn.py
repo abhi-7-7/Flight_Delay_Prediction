@@ -6,6 +6,7 @@ Trains on the training split, early-stops on validation AP, logs validation
 metrics. The test split is never touched here.
 """
 import argparse
+import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -26,16 +27,30 @@ from phase2.tracking import append_result, load_config  # noqa: E402
 from phase2.weather import FORECAST_INPUTS, forecast_inputs  # noqa: E402
 
 DEFAULTS = {
-    "branches": ["origin", "route"], "window": 14, "weather": False, "forecast": False,
+    "branches": ["origin", "route"], "window": 14, "weather": False, "weather_shift": 0, "forecast": False,
     "flight_embedding": False, "encoder": "gru", "hidden": 32, "dropout": 0.2,
     "lr": 1e-3, "weight_decay": 1e-4, "batch_size": 1024, "max_epochs": 25,
     "patience": 4, "seeds": [42, 43, 44],
 }
 
 
+def shift_days(table, s: int):
+    """Timing control for Stage 3. s = +1 shows each window step the weather
+    of the day before (older, still allowed); s = -1 shows the weather of the
+    day after, so the last step is day D itself (a deliberate leak)."""
+    vals = np.full_like(table.values, np.nan)
+    if s > 0:
+        vals[:, s:] = table.values[:, :-s]
+    else:
+        vals[:, :s] = table.values[:, -s:]
+    return dataclasses.replace(table, values=vals)
+
+
 def prepare(cfg: dict):
     df = load_flights()
     tables = load_daily_tables()
+    if cfg["weather_shift"]:  # timing control only, see Stage 3
+        tables["weather"] = shift_days(tables["weather"], cfg["weather_shift"])
     train = df[df["split"] == "train"].reset_index(drop=True)
     val = df[df["split"] == "validation"].reset_index(drop=True)
     numeric = list(P1_NUMERIC)

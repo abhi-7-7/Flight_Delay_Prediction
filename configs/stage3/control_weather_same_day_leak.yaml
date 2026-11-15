@@ -1,0 +1,10 @@
+stage: 3
+experiment: control_weather_same_day_leak
+branches: [origin, route]
+window: 3
+weather: true
+weather_shift: -1
+forecast: false
+encoder: gru
+seeds: [42, 43, 44]
+notes: CONTROL - DELIBERATE LEAK, last step is day D weather; never a candidate model
